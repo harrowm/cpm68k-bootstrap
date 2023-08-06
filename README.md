@@ -5,7 +5,7 @@ After trying for a while to modify a bios written in 68000 machine code, I thoug
 
 brew install cpmtools
 cat 68k-diskdefs.txt >> /opt/homebrew/share/diskdefs
-.. this is for a M! MAc, for a x86 Mac/Linux the home brew install directory is different 
+.. this is for a M1 MAc, for a x86 Mac/Linux the home brew install directory is different 
 
 The basic idea is to follow the steps used by Plasmode to set up cpm68k on his 68k board and leverage Damien Wildie's excellent work for his board.
 
