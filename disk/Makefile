@@ -6,7 +6,7 @@ target/rosco.img: ../boot/target/boot.bin | target
 	mformat -i target/rosco.img -F :: 
 	mcopy -i target/rosco.img files/* ::
 	echo 'cut and paste one of these'
-	echo 'cd ~/mame && ./mame roscom68k -hard2 ../cpm68k-bootstrap/disk/rosco.img -log -oslog -debug'
+	echo 'cd ~/mame && ./mame roscom68k -hard2 ../cpm68k-bootstrap/disk/target/rosco.img -log -oslog -debug'
 	
 clean:
 	rm -rf target/* files/roscode1.bin

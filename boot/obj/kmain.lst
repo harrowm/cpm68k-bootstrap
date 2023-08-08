@@ -1,5 +1,5 @@
 Sections:
-00: ".text" (0-6B77)
+00: ".text" (0-6B73)
 
 
 Source: "kmain.asm"
@@ -11,7 +11,7 @@ Source: "kmain.asm"
                             	     6:                     section .text
                             	     7: 
                             	     8: kmain::
-00:00000000 41FA6B52        	     9:                     LEA.L   strBootMsg,A0
+00:00000000 41FA6B4E        	     9:                     LEA.L   strBootMsg,A0
 00:00000004 2F08            	    10:                     MOVE.L  A0,-(A7)
 00:00000006 4EB900000000    	    11:                     JSR     mcPrintln
 00:0000000C 588F            	    12:                     ADDQ.L  #4,A7
@@ -29,7 +29,7 @@ Source: "kmain.asm"
                             	    24:                     ; relocate the bios srec file to $1B000
 00:00000026 41FA65A6        	    25:                     LEA.L   bios_start,A0               ; start of srec file
 00:0000002A 43F90001B000    	    26:                     LEA.L   $1B000,A1                   ; absolute dest addr (CPM start)
-00:00000030 203A6B22        	    27:                     MOVE.L  bios_length,D0              ; length
+00:00000030 203A6B1E        	    27:                     MOVE.L  bios_length,D0              ; length
 00:00000034 E488            	    28:                     LSR.L   #2,D0                       ; convert to long words
 00:00000036 5380            	    29:                     SUBQ.L  #1,D0                       ; subtract 1 for dbra
                             	    30: .MOVE_LOOP2:
@@ -37,14 +37,14 @@ Source: "kmain.asm"
 00:0000003A 51C8FFFC        	    32:                     DBRA    D0,.MOVE_LOOP2              ; loop until end of srec
                             	    33: 
                             	    34:                     ; load up a predefined CPM disk image from 0x20000
-                            	    35:                     ;LEA.L   disk_start,A0               ; start of srec file
-                            	    36:                     ;LEA.L   $20000,A1                   ; absolute dest addr (CPM start)
-                            	    37:                     ;MOVE.L  disk_length,D0              ; length
-                            	    38:                     ;LSR.L   #2,D0                       ; convert to long words
-                            	    39:                     ;SUBQ.L  #1,D0                       ; subtract 1 for dbra
+                            	    35:                    ; LEA.L   disk_start,A0               ; start of srec file
+                            	    36:                    ; LEA.L   $20000,A1                   ; absolute dest addr (CPM start)
+                            	    37:                    ; MOVE.L  disk_length,D0              ; length
+                            	    38:                    ; LSR.L   #2,D0                       ; convert to long words
+                            	    39:                    ; SUBQ.L  #1,D0                       ; subtract 1 for dbra
                             	    40: .MOVE_LOOP3:
-                            	    41:                     ; MOVE.L  (A0)+,(A1)+                 ; copy long word from source to dest
-                            	    42:                     ; DBRA    D0,.MOVE_LOOP3              ; loop until end of srec
+                            	    41:                    ; MOVE.L  (A0)+,(A1)+                 ; copy long word from source to dest
+                            	    42:                    ; DBRA    D0,.MOVE_LOOP3              ; loop until end of srec
                             	    43: 
                             	    44:                     ; and jump to it to start CPM !
 00:0000003E 4EF900015000    	    45:                     JMP     $15000                                      
@@ -3302,70 +3302,70 @@ Source: "kmain.asm"
                             	    49: srec_end:      
                             	    50: srec_length = srec_end - srec_start
                             	    51: 
-00:000065CE 21FC0001B012008C	    52: bios_start:         incbin "../bios/target/bios.sr.bin" 
-00:000065D6 7000724161000098
-00:000065DE 4E750C400016640A
-00:000065E6 D080D080207B0006
-00:000065EE 4ED04E730001B000
-00:000065F6 0001B0800001B084
-00:000065FE 0001B0900001B0A6
-00:00006606 0001B0AE0001B0AE
-00:0000660E 0001B0AE0001B0B6
-00:00006616 0001B0BE0001B0DC
-00:0000661E 0001B0E40001B0F0
-00:00006626 0001B0F80001B128
-00:0000662E 0001B0B00001B0EC
-00:00006636 0001B0F00001B146
-00:0000663E 0001B14E0001B150
-00:00006646 0001B1420001B152
-00:0000664E 6000A03A103C0007
-00:00006656 4E4F700010014E75
-00:0000665E 61F24A4067FA103C
-00:00006666 00054E4F1001C0BC
-00:0000666E 0000007F4E75103C
-00:00006676 00064E4F4E754E75
-00:0000667E 103C00FF4E754239
-00:00006686 0001B1744E757000
-00:0000668E B23C00036A1413C1
-00:00006696 0001B16E103A00A0
-00:0000669E C0FC001AD0BC0001
-00:000066A6 B1884E7533C10001
-00:000066AE B1744E7533C10001
-00:000066B6 B1764E7530014E75
-00:000066BE 23C10001B1784E75
-00:000066C6 610A22D851CAFFFC
-00:000066CE 70004E75203A006E
-00:000066D6 ED48E3880C390002
-00:000066DE 0001B16E6706D0BC
-00:000066E6 000200002040227A
-00:000066EE 0058343C001F4E75
-00:000066F6 0C3900020001B16E
-00:000066FE 660C61D020D951CA
-00:00006706 FFFC70004E7570FF
-00:0000670E 4E7570004E75203C
-00:00006716 0001B17E4E754E75
-00:0000671E 4E750281000000FF
-00:00006726 0C41002F670E0C41
-00:0000672E 00096708E5492041
-00:00006736 201020824E75FF00
-00:0000673E FFFFFFFF00000000
-00:00006746 0000000000000001
-00:0000674E 0009000000040000
-00:00006756 0000000000000000
-00:0000675E 00000001B2060001
-00:00006766 B1D6000000000001
-00:0000676E B286000000000000
-00:00006776 000000000001B206
-00:0000677E 0001B1E600000000
-00:00006786 0001B38600000000
-00:0000678E 0000000000000001
-00:00006796 B2060001B1F60000
-00:0000679E 00000001B4860400
-00:000067A6 040F000000BF00FF
-00:000067AE 00000000000C0400
-00:000067B6 040F000000BF00FF
-00:000067BE 00000000000C0400
-00:000067C6 0307000000FF007F
+00:000065CE 21FC0001B00C008C	    52: bios_start:         incbin "../bios/target/bios.sr.bin" 
+00:000065D6 70004E750C400017
+00:000065DE 640AD080D080207B
+00:000065E6 00064E904E730001
+00:000065EE B0000001B07A0001
+00:000065F6 B0800001B08C0001
+00:000065FE B0A20001B0AA0001
+00:00006606 B0AA0001B0AA0001
+00:0000660E B0B20001B0BA0001
+00:00006616 B0D80001B0E00001
+00:0000661E B0EC0001B0F40001
+00:00006626 B1240001B0AC0001
+00:0000662E B0E80001B0EC0001
+00:00006636 B1420001B14A0001
+00:0000663E B14C0001B13E0001
+00:00006646 B14E4EF9000150BC
+00:0000664E 103C00074E4F7000
+00:00006656 10014E7561F24A40
+00:0000665E 67FA103C00054E4F
+00:00006666 1001C0BC0000007F
+00:0000666E 4E75103C00064E4F
+00:00006676 4E754E75103C00FF
+00:0000667E 4E7542390001B170
+00:00006686 4E757000B23C0003
+00:0000668E 6A1413C10001B16A
+00:00006696 103A00A0C0FC001A
+00:0000669E D0BC0001B1844E75
+00:000066A6 33C10001B1704E75
+00:000066AE 33C10001B1724E75
+00:000066B6 30014E7523C10001
+00:000066BE B1744E75610A22D8
+00:000066C6 51CAFFFC70004E75
+00:000066CE 203A006EED48E388
+00:000066D6 0C3900020001B16A
+00:000066DE 6706D0BC00020000
+00:000066E6 2040227A0058343C
+00:000066EE 001F4E750C390002
+00:000066F6 0001B16A660C61D0
+00:000066FE 20D951CAFFFC7000
+00:00006706 4E7570FF4E757000
+00:0000670E 4E75203C0001B17A
+00:00006716 4E754E754E750281
+00:0000671E 000000FF0C41002F
+00:00006726 670E0C4100096708
+00:0000672E E549204120102082
+00:00006736 4E75FF00FFFFFFFF
+00:0000673E 0000000000000000
+00:00006746 0000000100002000
+00:0000674E 0001300000000000
+00:00006756 0000000000000001
+00:0000675E B2020001B1D20000
+00:00006766 00000001B2820000
+00:0000676E 0000000000000000
+00:00006776 0001B2020001B1E2
+00:0000677E 000000000001B382
+00:00006786 0000000000000000
+00:0000678E 00000001B2020001
+00:00006796 B1F2000000000001
+00:0000679E B4820400040F0000
+00:000067A6 00BF00FF00000000
+00:000067AE 000C0400040F0000
+00:000067B6 00BF00FF00000000
+00:000067BE 000C040003070000
+00:000067C6 00FF007F00000000
 00:000067CE 0000000000000000
 00:000067D6 0000000000000000
 00:000067DE 0000000000000000
@@ -3478,7 +3478,7 @@ Source: "kmain.asm"
 00:00006B36 0000000000000000
 00:00006B3E 0000000000000000
 00:00006B46 0000000000000000
-00:00006B4E 000000000000
+00:00006B4E 0000
                             	    53: bios_end:      
                             	    54: bios_length = bios_end - bios_start
                             	    55: 
@@ -3486,25 +3486,25 @@ Source: "kmain.asm"
                             	    57: ;disk_end:      
                             	    58: ;disk_length = disk_end - disk_start
                             	    59: 
-00:00006B54 43504D2D36386B20	    60: strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.1", 0
-00:00006B5C 6C6F616465722066
-00:00006B64 6F7220726F73636F
-00:00006B6C 5F6D36386B207630
-00:00006B74 2E31
-00:00006B76 00
+00:00006B50 43504D2D36386B20	    60: strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.2", 0
+00:00006B58 6C6F616465722066
+00:00006B60 6F7220726F73636F
+00:00006B68 5F6D36386B207630
+00:00006B70 2E32
+00:00006B72 00
                             	    61: 
 
 
 Symbols by name:
-bios_end                        00:00006B54
-bios_length                     00:00006B54
+bios_end                        00:00006B50
+bios_length                     00:00006B50
 bios_start                      00:000065CE
 kmain                           00:00000000 EXP
 mcPrintln                       external
 srec_end                        00:000065CE
 srec_length                     00:000065CE
 srec_start                      00:00000046
-strBootMsg                      00:00006B54
+strBootMsg                      00:00006B50
 
 Symbols by value:
 00000000 kmain
@@ -3512,6 +3512,6 @@ Symbols by value:
 000065CE srec_length
 000065CE bios_start
 000065CE srec_end
-00006B54 strBootMsg
-00006B54 bios_length
-00006B54 bios_end
+00006B50 strBootMsg
+00006B50 bios_length
+00006B50 bios_end

@@ -15,23 +15,29 @@
 
 
 _ccp     equ $150BC                     ; hard location for _ccp of CPM15000.SR
-         org $1B000                     ; this is the hard location for _init for CPM15000.SR
+  ;       org $1B000                     ; this is the hard location for _init for CPM15000.SR
 
 _init::    
     move.l  #TRAPHNDL,$8c               ; set up trap #3 handler
     clr.l   D0                          ; log on disk A, user 0
-
-    move.l  #65,D1
-    jsr     CONOUT
     rts
 
 TRAPHNDL:
-    cmpi    #22,D0                      ; Function call in range ?
+; debug patch start
+   ; move.l  D0,A4                    ; Save scratch registers
+   ; move.l  D1,A5                    ; ...
+   ; add.l   #67,D1                      ; print from 'B' onwards
+   ; jsr     CONOUT
+   ; move.l  A4,D0                    ; Restore scratch registers
+   ; move.l  A5,D1                    ; ...
+; debug patch end
+
+    cmpi    #23,D0                      ; Function call in range ?
     bcc     TRAPNG
     add.l   D0,D0                       ; Multiply FC...
     add.l   D0,D0                       ; ... by 4...
     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
-    jmp     (A0)                        ; ... then jump there
+    jsr     (A0)                        ; ... then jump there
 
 TRAPNG:
     rte
@@ -230,10 +236,12 @@ DMA           dc.l        0
 SELCODE       dc.b        0              ; reserve byte
 RESV1         dc.b        0              ; reserve byte, padding
 
+; memory table must start on an even address
+              even
 MEMRGN        dc.w        1              ; 1 memory region
 ;              dc.l        $20000         ; right after the CP/M 
-              dc.l        $90000         ; right after the CP/M 
-              dc.l        $40000         ; goes until $60000, 256K bytes
+              dc.l        $02000         ; right after the rosco firmware 
+              dc.l        $13000         ; goes until $13000, 256K bytes
 ;			  dc.l        $A0000         ; goes until $C0000, 655K bytes  
 
 ; disk parameter headers

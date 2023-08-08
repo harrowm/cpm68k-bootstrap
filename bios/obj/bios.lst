@@ -1,5 +1,5 @@
 Sections:
-00: "seg1b000" (1B000-1B586)
+00: "CODE" (0-582)
 
 
 Source: "bios.asm"
@@ -20,458 +20,466 @@ Source: "bios.asm"
                             	    15: 
                             	    16: 
                             	    17: _ccp     equ $150BC                     ; hard location for _ccp of CPM15000.SR
-                            	    18:          org $1B000                     ; this is the hard location for _init for CPM15000.SR
+                            	    18:   ;       org $1B000                     ; this is the hard location for _init for CPM15000.SR
                             	    19: 
                             	    20: _init::    
-00:0001B000 21FC0001B012008C	    21:     move.l  #TRAPHNDL,$8c               ; set up trap #3 handler
-00:0001B008 7000            	    22:     clr.l   D0                          ; log on disk A, user 0
-                            	    23: 
-00:0001B00A 7241            	    24:     move.l  #65,D1
-00:0001B00C 61000098        	    25:     jsr     CONOUT
-00:0001B010 4E75            	    26:     rts
-                            	    27: 
-                            	    28: TRAPHNDL:
-00:0001B012 0C400016        	    29:     cmpi    #22,D0                      ; Function call in range ?
-00:0001B016 640A            	    30:     bcc     TRAPNG
-00:0001B018 D080            	    31:     add.l   D0,D0                       ; Multiply FC...
-00:0001B01A D080            	    32:     add.l   D0,D0                       ; ... by 4...
-00:0001B01C 207B0006        	    33:     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
-00:0001B020 4ED0            	    34:     jmp     (A0)                        ; ... then jump there
-                            	    35: 
-                            	    36: TRAPNG:
-00:0001B022 4E73            	    37:     rte
-                            	    38: 
-                            	    39: BIOSBASE:
-00:0001B024 0001B000        	    40:     dc.l    _init
-00:0001B028 0001B080        	    41:     dc.l    WBOOT
-00:0001B02C 0001B084        	    42:     dc.l    CONSTAT
-00:0001B030 0001B090        	    43:     dc.l    CONIN
-00:0001B034 0001B0A6        	    44:     dc.l    CONOUT
-00:0001B038 0001B0AE        	    45:     dc.l    LSTOUT
-00:0001B03C 0001B0AE        	    46:     dc.l    PUN
-00:0001B040 0001B0AE        	    47:     dc.l    RDR
-00:0001B044 0001B0B6        	    48:     dc.l    HOME
-00:0001B048 0001B0BE        	    49:     dc.l    SELDSK
-00:0001B04C 0001B0DC        	    50:     dc.l    SETTRK
-00:0001B050 0001B0E4        	    51:     dc.l    SETSEC
-00:0001B054 0001B0F0        	    52:     dc.l    SETDMA
-00:0001B058 0001B0F8        	    53:     dc.l    READ
-00:0001B05C 0001B128        	    54:     dc.l    WRITE
-00:0001B060 0001B0B0        	    55:     dc.l    LISTST
-00:0001B064 0001B0EC        	    56:     dc.l    SECTRAN
-00:0001B068 0001B0F0        	    57:     dc.l    SETDMA
-00:0001B06C 0001B146        	    58:     dc.l    GETSEG
-00:0001B070 0001B14E        	    59:     dc.l    GETIOB
-00:0001B074 0001B150        	    60:     dc.l    SETIOB
-00:0001B078 0001B142        	    61:     dc.l    FLUSH
-00:0001B07C 0001B152        	    62:     dc.l    SETEXC
-                            	    63: 
-                            	    64: 
-                            	    65: WBOOT:  
-00:0001B080 6000A03A        	    66:     jmp   _ccp
-                            	    67: 
-                            	    68: CONSTAT: 
-                            	    69: ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
-00:0001B084 103C0007        	    70:     move.b #7,D0                        ; use EASy68k trap 15 task 7
-00:0001B088 4E4F            	    71:     trap   #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
-00:0001B08A 7000            	    72:     clr.l  D0
-00:0001B08C 1001            	    73:     move.b D1,D0
-00:0001B08E 4E75            	    74:     rts
-                            	    75:          
-                            	    76: CONIN:    
-                            	    77: ; Read single ASCII character from the keyboard into d0
-00:0001B090 61F2            	    78:     bsr    CONSTAT                      ; see if key pressed
-00:0001B092 4A40            	    79:     tst    D0
-00:0001B094 67FA            	    80:     beq    CONIN
-00:0001B096 103C0005        	    81:     move.b #5,D0                        ; use EASy68k trap 15 task 5
-00:0001B09A 4E4F            	    82:     trap   #15                          ; d1.b contains the ascii character
-00:0001B09C 1001            	    83:     move.b D1,D0      
-00:0001B09E C0BC0000007F    	    84:     and.l  #$7f,D0                      ; only use 7 bit character set
-00:0001B0A4 4E75            	    85:     rts
-                            	    86: 
-                            	    87: CONOUT: 
-                            	    88: ; Display single ASCII character in d1
-00:0001B0A6 103C0006        	    89:     move.b #6,D0                        ; use EASy68k trap 15 task 6
-00:0001B0AA 4E4F            	    90:     trap   #15
-00:0001B0AC 4E75            	    91:     rts                                 ; and exit
+00:00000000 21FC0000000C008C	    21:     move.l  #TRAPHNDL,$8c               ; set up trap #3 handler
+00:00000008 7000            	    22:     clr.l   D0                          ; log on disk A, user 0
+00:0000000A 4E75            	    23:     rts
+                            	    24: 
+                            	    25: TRAPHNDL:
+                            	    26: ; debug patch start
+                            	    27:    ; move.l  D0,A4                    ; Save scratch registers
+                            	    28:    ; move.l  D1,A5                    ; ...
+                            	    29:    ; add.l   #67,D1                      ; print from 'B' onwards
+                            	    30:    ; jsr     CONOUT
+                            	    31:    ; move.l  A4,D0                    ; Restore scratch registers
+                            	    32:    ; move.l  A5,D1                    ; ...
+                            	    33: ; debug patch end
+                            	    34: 
+00:0000000C 0C400017        	    35:     cmpi    #23,D0                      ; Function call in range ?
+00:00000010 640A            	    36:     bcc     TRAPNG
+00:00000012 D080            	    37:     add.l   D0,D0                       ; Multiply FC...
+00:00000014 D080            	    38:     add.l   D0,D0                       ; ... by 4...
+00:00000016 207B0006        	    39:     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
+00:0000001A 4E90            	    40:     jsr     (A0)                        ; ... then jump there
+                            	    41: 
+                            	    42: TRAPNG:
+00:0000001C 4E73            	    43:     rte
+                            	    44: 
+                            	    45: BIOSBASE:
+00:0000001E 00000000        	    46:     dc.l    _init
+00:00000022 0000007A        	    47:     dc.l    WBOOT
+00:00000026 00000080        	    48:     dc.l    CONSTAT
+00:0000002A 0000008C        	    49:     dc.l    CONIN
+00:0000002E 000000A2        	    50:     dc.l    CONOUT
+00:00000032 000000AA        	    51:     dc.l    LSTOUT
+00:00000036 000000AA        	    52:     dc.l    PUN
+00:0000003A 000000AA        	    53:     dc.l    RDR
+00:0000003E 000000B2        	    54:     dc.l    HOME
+00:00000042 000000BA        	    55:     dc.l    SELDSK
+00:00000046 000000D8        	    56:     dc.l    SETTRK
+00:0000004A 000000E0        	    57:     dc.l    SETSEC
+00:0000004E 000000EC        	    58:     dc.l    SETDMA
+00:00000052 000000F4        	    59:     dc.l    READ
+00:00000056 00000124        	    60:     dc.l    WRITE
+00:0000005A 000000AC        	    61:     dc.l    LISTST
+00:0000005E 000000E8        	    62:     dc.l    SECTRAN
+00:00000062 000000EC        	    63:     dc.l    SETDMA
+00:00000066 00000142        	    64:     dc.l    GETSEG
+00:0000006A 0000014A        	    65:     dc.l    GETIOB
+00:0000006E 0000014C        	    66:     dc.l    SETIOB
+00:00000072 0000013E        	    67:     dc.l    FLUSH
+00:00000076 0000014E        	    68:     dc.l    SETEXC
+                            	    69: 
+                            	    70: 
+                            	    71: WBOOT:  
+00:0000007A 4EF9000150BC    	    72:     jmp   _ccp
+                            	    73: 
+                            	    74: CONSTAT: 
+                            	    75: ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
+00:00000080 103C0007        	    76:     move.b #7,D0                        ; use EASy68k trap 15 task 7
+00:00000084 4E4F            	    77:     trap   #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
+00:00000086 7000            	    78:     clr.l  D0
+00:00000088 1001            	    79:     move.b D1,D0
+00:0000008A 4E75            	    80:     rts
+                            	    81:          
+                            	    82: CONIN:    
+                            	    83: ; Read single ASCII character from the keyboard into d0
+00:0000008C 61F2            	    84:     bsr    CONSTAT                      ; see if key pressed
+00:0000008E 4A40            	    85:     tst    D0
+00:00000090 67FA            	    86:     beq    CONIN
+00:00000092 103C0005        	    87:     move.b #5,D0                        ; use EASy68k trap 15 task 5
+00:00000096 4E4F            	    88:     trap   #15                          ; d1.b contains the ascii character
+00:00000098 1001            	    89:     move.b D1,D0      
+00:0000009A C0BC0000007F    	    90:     and.l  #$7f,D0                      ; only use 7 bit character set
+00:000000A0 4E75            	    91:     rts
                             	    92: 
-                            	    93: LSTOUT:    
-                            	    94: PUN:
-                            	    95: RDR:
-00:0001B0AE 4E75            	    96:     rts
-                            	    97: 
-                            	    98: LISTST:    
-00:0001B0B0 103C00FF        	    99:     move.b #$ff,D0
-00:0001B0B4 4E75            	   100:     rts
-                            	   101: 
-                            	   102: MAXDSK     equ 3                         ; three RAM drives
-                            	   103: DPHLEN     equ 26                        ; length of disk parameter header
-                            	   104: 
-                            	   105: HOME:    
-00:0001B0B6 42390001B174    	   106:     clr.b  TRACK
-00:0001B0BC 4E75            	   107:     rts
-                            	   108: 
-                            	   109: SELDSK:    
-                            	   110: ;    select disk given by register d1.b
-00:0001B0BE 7000            	   111:     moveq  #0,D0
-00:0001B0C0 B23C0003        	   112:     cmp.b  #MAXDSK,D1                     ; valid drive number?
-00:0001B0C4 6A14            	   113:     bpl    SELRTN                         ; if no, return 0 in d0
-00:0001B0C6 13C10001B16E    	   114:     move.b D1,SELDRV                      ; else, save drive number
-00:0001B0CC 103A00A0        	   115:     move.b SELDRV,D0
-00:0001B0D0 C0FC001A        	   116:     mulu   #DPHLEN,D0
-00:0001B0D4 D0BC0001B188    	   117:     add.l  #DPH0,D0                       ; point d0 at correct dph
-                            	   118: 
-                            	   119: SELRTN:
-00:0001B0DA 4E75            	   120:     rts
-                            	   121: 
-                            	   122: SETTRK:    
-00:0001B0DC 33C10001B174    	   123:     move.w  D1,TRACK
-00:0001B0E2 4E75            	   124:     rts
-                            	   125: 
-                            	   126: SETSEC:    
-00:0001B0E4 33C10001B176    	   127:     move.w  D1,SECTOR
-00:0001B0EA 4E75            	   128:     rts
-                            	   129: 
-                            	   130: SECTRAN:
-                            	   131: ;    no sector translate, put d1 into d0 and return
-00:0001B0EC 3001            	   132:     move.w  D1,D0
-00:0001B0EE 4E75            	   133:     rts
-                            	   134: 
-                            	   135: SETDMA:
-00:0001B0F0 23C10001B178    	   136:     move.l  D1,DMA
-00:0001B0F6 4E75            	   137:     rts
-                            	   138: 
-                            	   139: READ:
-                            	   140: ; Read one sector from requested disk, track, sector to dma address
-                            	   141: ; Both drive A, B & C are RAM drives
-                            	   142: ; drive A starts from 0x420000 to 0x5BFFFF
-                            	   143: ; drive B starts from 0xC0000 to 0xFFFFF
+                            	    93: CONOUT: 
+                            	    94: ; Display single ASCII character in d1
+00:000000A2 103C0006        	    95:     move.b #6,D0                        ; use EASy68k trap 15 task 6
+00:000000A6 4E4F            	    96:     trap   #15
+00:000000A8 4E75            	    97:     rts                                 ; and exit
+                            	    98: 
+                            	    99: LSTOUT:    
+                            	   100: PUN:
+                            	   101: RDR:
+00:000000AA 4E75            	   102:     rts
+                            	   103: 
+                            	   104: LISTST:    
+00:000000AC 103C00FF        	   105:     move.b #$ff,D0
+00:000000B0 4E75            	   106:     rts
+                            	   107: 
+                            	   108: MAXDSK     equ 3                         ; three RAM drives
+                            	   109: DPHLEN     equ 26                        ; length of disk parameter header
+                            	   110: 
+                            	   111: HOME:    
+00:000000B2 423900000170    	   112:     clr.b  TRACK
+00:000000B8 4E75            	   113:     rts
+                            	   114: 
+                            	   115: SELDSK:    
+                            	   116: ;    select disk given by register d1.b
+00:000000BA 7000            	   117:     moveq  #0,D0
+00:000000BC B23C0003        	   118:     cmp.b  #MAXDSK,D1                     ; valid drive number?
+00:000000C0 6A14            	   119:     bpl    SELRTN                         ; if no, return 0 in d0
+00:000000C2 13C10000016A    	   120:     move.b D1,SELDRV                      ; else, save drive number
+00:000000C8 103A00A0        	   121:     move.b SELDRV,D0
+00:000000CC C0FC001A        	   122:     mulu   #DPHLEN,D0
+00:000000D0 D0BC00000184    	   123:     add.l  #DPH0,D0                       ; point d0 at correct dph
+                            	   124: 
+                            	   125: SELRTN:
+00:000000D6 4E75            	   126:     rts
+                            	   127: 
+                            	   128: SETTRK:    
+00:000000D8 33C100000170    	   129:     move.w  D1,TRACK
+00:000000DE 4E75            	   130:     rts
+                            	   131: 
+                            	   132: SETSEC:    
+00:000000E0 33C100000172    	   133:     move.w  D1,SECTOR
+00:000000E6 4E75            	   134:     rts
+                            	   135: 
+                            	   136: SECTRAN:
+                            	   137: ;    no sector translate, put d1 into d0 and return
+00:000000E8 3001            	   138:     move.w  D1,D0
+00:000000EA 4E75            	   139:     rts
+                            	   140: 
+                            	   141: SETDMA:
+00:000000EC 23C100000174    	   142:     move.l  D1,DMA
+00:000000F2 4E75            	   143:     rts
                             	   144: 
-                            	   145: 
-00:0001B0F8 610A            	   146:     bsr     SETUPRD                      ; translate track/sector values into RAM loc
-                            	   147: RAMDRVR:
-00:0001B0FA 22D8            	   148:     move.l (A0)+,(A1)+
-00:0001B0FC 51CAFFFC        	   149:     dbra   D2,RAMDRVR
+                            	   145: READ:
+                            	   146: ; Read one sector from requested disk, track, sector to dma address
+                            	   147: ; Both drive A, B & C are RAM drives
+                            	   148: ; drive A starts from 0x420000 to 0x5BFFFF
+                            	   149: ; drive B starts from 0xC0000 to 0xFFFFF
                             	   150: 
-00:0001B100 7000            	   151:     clr.l  D0                            ; return OK status         
-00:0001B102 4E75            	   152:     rts         
-                            	   153: 
-                            	   154: SETUPRD:
-                            	   155: ; translate track/sector into RAM location on the RAM drive
-00:0001B104 203A006E        	   156:     move.l TRACK,D0                      ; get track & sector values
-00:0001B108 ED48            	   157:     lsl.w  #6,D0                         ; multiply by 64
-00:0001B10A E388            	   158:     lsl.l  #1,D0                         ; multiply the track/sector by 128 to index into RAM
-00:0001B10C 0C3900020001B16E	   159:     cmp.b  #2,SELDRV                     ; drive C is RAM drive
-00:0001B114 6706            	   160:     beq    RAMDRV
-                            	   161: ; now have one drive starting at 0x20000
-                            	   162: ;    add.l  #$420000,D0                   ; add base address of RAM drive
-00:0001B116 D0BC00020000    	   163:     add.l  #$20000,D0                   ; add base address of RAM drive
-                            	   164:     bra    GETDATA
-                            	   165: 
-                            	   166: RAMDRV:
-                            	   167: ; no drive C
-                            	   168: ;    add.l  #$C0000,D0
-                            	   169: 
-                            	   170: GETDATA:
-00:0001B11C 2040            	   171:     move.l D0,A0                         ; point to the track/sector in RAM drive
-00:0001B11E 227A0058        	   172:     move.l DMA,A1                        ; get dma
-00:0001B122 343C001F        	   173:     move.w #(128/4)-1,D2                 ; long word move 128 bytes of sector data
-00:0001B126 4E75            	   174:     rts
+                            	   151: 
+00:000000F4 610A            	   152:     bsr     SETUPRD                      ; translate track/sector values into RAM loc
+                            	   153: RAMDRVR:
+00:000000F6 22D8            	   154:     move.l (A0)+,(A1)+
+00:000000F8 51CAFFFC        	   155:     dbra   D2,RAMDRVR
+                            	   156: 
+00:000000FC 7000            	   157:     clr.l  D0                            ; return OK status         
+00:000000FE 4E75            	   158:     rts         
+                            	   159: 
+                            	   160: SETUPRD:
+                            	   161: ; translate track/sector into RAM location on the RAM drive
+00:00000100 203A006E        	   162:     move.l TRACK,D0                      ; get track & sector values
+00:00000104 ED48            	   163:     lsl.w  #6,D0                         ; multiply by 64
+00:00000106 E388            	   164:     lsl.l  #1,D0                         ; multiply the track/sector by 128 to index into RAM
+00:00000108 0C3900020000016A	   165:     cmp.b  #2,SELDRV                     ; drive C is RAM drive
+00:00000110 6706            	   166:     beq    RAMDRV
+                            	   167: ; now have one drive starting at 0x20000
+                            	   168: ;    add.l  #$420000,D0                   ; add base address of RAM drive
+00:00000112 D0BC00020000    	   169:     add.l  #$20000,D0                   ; add base address of RAM drive
+                            	   170:     bra    GETDATA
+                            	   171: 
+                            	   172: RAMDRV:
+                            	   173: ; no drive C
+                            	   174: ;    add.l  #$C0000,D0
                             	   175: 
-                            	   176: WRITE:
-                            	   177: ; Write one sector to requested disk, track, sector from dma address
-                            	   178: ; Both drive A & B are RAM drive
-00:0001B128 0C3900020001B16E	   179:     cmp.b  #2,SELDRV                     ; only drive C can be written
-00:0001B130 660C            	   180:     bne    WRBAD
-00:0001B132 61D0            	   181:     bsr    SETUPRD                       ; translate track/sector values into RAM loc
-                            	   182: RAMDRVW:
-00:0001B134 20D9            	   183:     move.l (A1)+,(A0)+
-00:0001B136 51CAFFFC        	   184:     dbra   D2,RAMDRVW
-                            	   185: 
-00:0001B13A 7000            	   186:     clr.l  D0
-00:0001B13C 4E75            	   187:     rts         
-                            	   188: WRBAD:
-00:0001B13E 70FF            	   189:     move.l #-1,D0
-00:0001B140 4E75            	   190:     rts
+                            	   176: GETDATA:
+00:00000118 2040            	   177:     move.l D0,A0                         ; point to the track/sector in RAM drive
+00:0000011A 227A0058        	   178:     move.l DMA,A1                        ; get dma
+00:0000011E 343C001F        	   179:     move.w #(128/4)-1,D2                 ; long word move 128 bytes of sector data
+00:00000122 4E75            	   180:     rts
+                            	   181: 
+                            	   182: WRITE:
+                            	   183: ; Write one sector to requested disk, track, sector from dma address
+                            	   184: ; Both drive A & B are RAM drive
+00:00000124 0C3900020000016A	   185:     cmp.b  #2,SELDRV                     ; only drive C can be written
+00:0000012C 660C            	   186:     bne    WRBAD
+00:0000012E 61D0            	   187:     bsr    SETUPRD                       ; translate track/sector values into RAM loc
+                            	   188: RAMDRVW:
+00:00000130 20D9            	   189:     move.l (A1)+,(A0)+
+00:00000132 51CAFFFC        	   190:     dbra   D2,RAMDRVW
                             	   191: 
-                            	   192: FLUSH:
-00:0001B142 7000            	   193:     clr.l  D0                            ; return successful
-00:0001B144 4E75            	   194:     rts
-                            	   195: 
-                            	   196: GETSEG:
-00:0001B146 203C0001B17E    	   197:     move.l #MEMRGN,D0                    ; return address of mem region table
-00:0001B14C 4E75            	   198:     rts
-                            	   199: 
-                            	   200: GETIOB:
-00:0001B14E 4E75            	   201:     rts
-                            	   202: 
-                            	   203: SETIOB:
-00:0001B150 4E75            	   204:     rts
+00:00000136 7000            	   192:     clr.l  D0
+00:00000138 4E75            	   193:     rts         
+                            	   194: WRBAD:
+00:0000013A 70FF            	   195:     move.l #-1,D0
+00:0000013C 4E75            	   196:     rts
+                            	   197: 
+                            	   198: FLUSH:
+00:0000013E 7000            	   199:     clr.l  D0                            ; return successful
+00:00000140 4E75            	   200:     rts
+                            	   201: 
+                            	   202: GETSEG:
+00:00000142 203C0000017A    	   203:     move.l #MEMRGN,D0                    ; return address of mem region table
+00:00000148 4E75            	   204:     rts
                             	   205: 
-                            	   206: SETEXC:
-00:0001B152 0281000000FF    	   207:     andi.l  #$ff,D1                      ; do only for exceptions 0 - 255
-00:0001B158 0C41002F        	   208:     cmpi    #47,D1
-00:0001B15C 670E            	   209:     beq     NOSET                        ; this BIOS doesn't set Trap 15
-00:0001B15E 0C410009        	   210:     cmpi    #9,D1                        ; or Trace
-00:0001B162 6708            	   211:     beq     NOSET
-00:0001B164 E549            	   212:     lsl     #2,D1                        ; multiply exception nmbr by 4
-00:0001B166 2041            	   213:     movea.l D1,A0
-00:0001B168 2010            	   214:     move.l  (A0),D0                      ; return old vector value
-00:0001B16A 2082            	   215:     move.l  D2,(A0)                      ; insert new vector
-                            	   216: 
-                            	   217: NOSET:    
-00:0001B16C 4E75            	   218:     rts
-                            	   219: 
-                            	   220: * ************************************************************************** *
-                            	   221: ; Data
-                            	   222: * ************************************************************************** *
-                            	   223: 
-00:0001B16E FF              	   224: SELDRV        dc.b        $ff            ; drive requested by seldsk
-00:0001B16F 00              	   225: RESV          dc.b        0              ; reserve byte, padding
-00:0001B170 FFFFFFFF        	   226: CURCFSECT     dc.l        -1             ; current CF sector, the 512 bytes data of curtrk is in sectCF
-00:0001B174 0000            	   227: TRACK         dc.w        0              ; track requested by settrk
-00:0001B176 0000            	   228: SECTOR        dc.w        0              ; max sector value is 0x3FF
-00:0001B178 00000000        	   229: DMA           dc.l        0
-00:0001B17C 00              	   230: SELCODE       dc.b        0              ; reserve byte
-00:0001B17D 00              	   231: RESV1         dc.b        0              ; reserve byte, padding
-                            	   232: 
-00:0001B17E 0001            	   233: MEMRGN        dc.w        1              ; 1 memory region
-                            	   234: ;              dc.l        $20000         ; right after the CP/M 
-00:0001B180 00090000        	   235:               dc.l        $90000         ; right after the CP/M 
-00:0001B184 00040000        	   236:               dc.l        $40000         ; goes until $60000, 256K bytes
-                            	   237: ;			  dc.l        $A0000         ; goes until $C0000, 655K bytes  
+                            	   206: GETIOB:
+00:0000014A 4E75            	   207:     rts
+                            	   208: 
+                            	   209: SETIOB:
+00:0000014C 4E75            	   210:     rts
+                            	   211: 
+                            	   212: SETEXC:
+00:0000014E 0281000000FF    	   213:     andi.l  #$ff,D1                      ; do only for exceptions 0 - 255
+00:00000154 0C41002F        	   214:     cmpi    #47,D1
+00:00000158 670E            	   215:     beq     NOSET                        ; this BIOS doesn't set Trap 15
+00:0000015A 0C410009        	   216:     cmpi    #9,D1                        ; or Trace
+00:0000015E 6708            	   217:     beq     NOSET
+00:00000160 E549            	   218:     lsl     #2,D1                        ; multiply exception nmbr by 4
+00:00000162 2041            	   219:     movea.l D1,A0
+00:00000164 2010            	   220:     move.l  (A0),D0                      ; return old vector value
+00:00000166 2082            	   221:     move.l  D2,(A0)                      ; insert new vector
+                            	   222: 
+                            	   223: NOSET:    
+00:00000168 4E75            	   224:     rts
+                            	   225: 
+                            	   226: * ************************************************************************** *
+                            	   227: ; Data
+                            	   228: * ************************************************************************** *
+                            	   229: 
+00:0000016A FF              	   230: SELDRV        dc.b        $ff            ; drive requested by seldsk
+00:0000016B 00              	   231: RESV          dc.b        0              ; reserve byte, padding
+00:0000016C FFFFFFFF        	   232: CURCFSECT     dc.l        -1             ; current CF sector, the 512 bytes data of curtrk is in sectCF
+00:00000170 0000            	   233: TRACK         dc.w        0              ; track requested by settrk
+00:00000172 0000            	   234: SECTOR        dc.w        0              ; max sector value is 0x3FF
+00:00000174 00000000        	   235: DMA           dc.l        0
+00:00000178 00              	   236: SELCODE       dc.b        0              ; reserve byte
+00:00000179 00              	   237: RESV1         dc.b        0              ; reserve byte, padding
                             	   238: 
-                            	   239: ; disk parameter headers
-                            	   240: 
-                            	   241: DPH0:    
-00:0001B188 00000000        	   242:     dc.l      0                          ; no sector translation table
-00:0001B18C 0000            	   243:     dc.w      0                          ; dummy
-00:0001B18E 0000            	   244:     dc.w      0
-00:0001B190 0000            	   245:     dc.w      0
-00:0001B192 0001B206        	   246:     dc.l      DIRBUF                     ; ptr to directory buffer
-00:0001B196 0001B1D6        	   247:     dc.l      DPB0                       ; ptr to disk parameter block
-00:0001B19A 00000000        	   248:     dc.l      0                          ; permanent drive, no check vector
-00:0001B19E 0001B286        	   249:     dc.l      ALV0                       ; ptr to allocation vector
-                            	   250: 
-                            	   251: DPH1:
-00:0001B1A2 00000000        	   252:     dc.l     0                           ; no sector translation table
-00:0001B1A6 0000            	   253:     dc.w     0                           ; dummy
-00:0001B1A8 0000            	   254:     dc.w     0
-00:0001B1AA 0000            	   255:     dc.w     0
-00:0001B1AC 0001B206        	   256:     dc.l     DIRBUF                      ; ptr to directory buffer
-00:0001B1B0 0001B1E6        	   257:     dc.l     DPB1                        ; ptr to disk parameter block
-00:0001B1B4 00000000        	   258:     dc.l     0                           ; permanent drive, no check vector
-00:0001B1B8 0001B386        	   259:     dc.l     ALV1                        ; ptr to allocation vector
-                            	   260: 
-                            	   261: DPH2:
-00:0001B1BC 00000000        	   262:     dc.l     0                           ; no sector translation table
-00:0001B1C0 0000            	   263:     dc.w     0                           ; dummy
-00:0001B1C2 0000            	   264:     dc.w     0
-00:0001B1C4 0000            	   265:     dc.w     0
-00:0001B1C6 0001B206        	   266:     dc.l     DIRBUF                      ; ptr to directory buffer
-00:0001B1CA 0001B1F6        	   267:     dc.l     DPB2                        ; ptr to disk parameter block
-00:0001B1CE 00000000        	   268:     dc.l     0                           ; permanent drive, no check vector
-00:0001B1D2 0001B486        	   269:     dc.l     ALV2                        ; ptr to allocation vector
-                            	   270: 
-                            	   271: ; disk parameter block
-                            	   272: ; flash drive from $420000 to 59FFFF,
-                            	   273: ; choose a BLS of 2048
-                            	   274: ; 1024 sectors (128 byte sector) per track
-                            	   275: ; 16 sectors per block
-                            	   276: ; 12 tracks per drive 
-                            	   277: ; DPB0:    
-                            	   278: ;     dc.w     1024                        ; 1024 sectors per track
-                            	   279: ;     dc.b     4                           ; block shift for BLS of 2048
-                            	   280: ;     dc.b     15                          ; block mask for BLS of 2048
-                            	   281: ;     dc.b     0                           ; extent mask, EXM
-                            	   282: ;     dc.b     0                           ; dummy fill
-                            	   283: ;     dc.w     767                         ; DSM, (12 tracks * 1024 sectors * 128 bytes /2048)-1
-                            	   284:                            
-                            	   285: ;     dc.w     255                         ; DRM, 256 directory entries
-                            	   286: ;     dc.w     0                           ; directory mask
-                            	   287: ; 	dc.w     0                           ; permanent mounted drive, check size is zero
-                            	   288: ;     dc.w     0                           ; no track offset
-                            	   289: 
-                            	   290: ; hack in a drive 0 that looked like old drive 1
-                            	   291: DPB0:    
-00:0001B1D6 0400            	   292:     dc.w     1024                        ; 1024 sectors per track
-00:0001B1D8 04              	   293:     dc.b     4                           ; block shift for BLS of 2048
-00:0001B1D9 0F              	   294:     dc.b     15                          ; block mask for BLS of 2048
-00:0001B1DA 00              	   295:     dc.b     0                           ; extent mask, EXM
-00:0001B1DB 00              	   296:     dc.b     0                           ; dummy fill
-00:0001B1DC 00BF            	   297:     dc.w     191                         ; DSM, (3 tracks * 1024 sectors * 128 bytes /2048)-1
-                            	   298:                            
-00:0001B1DE 00FF            	   299:     dc.w     255                         ; DRM, 256 directory entries
-00:0001B1E0 0000            	   300:     dc.w     0                           ; directory mask
-00:0001B1E2 0000            	   301:     dc.w     0                           ; permanent mounted drive, check size is zero
-00:0001B1E4 000C            	   302:     dc.w     12                          ; no track offset
-                            	   303: 
-                            	   304: 
-                            	   305: ; flash drive from $5A0000 to $5FFFFF
-                            	   306: ; choose a BLS of 2048
-                            	   307: ; 1024 sectors (128 byte sector) per track
-                            	   308: ; 16 sectors per block
-                            	   309: ; 3 tracks per drive 
-                            	   310: DPB1:    
-00:0001B1E6 0400            	   311:     dc.w     1024                        ; 1024 sectors per track
-00:0001B1E8 04              	   312:     dc.b     4                           ; block shift for BLS of 2048
-00:0001B1E9 0F              	   313:     dc.b     15                          ; block mask for BLS of 2048
-00:0001B1EA 00              	   314:     dc.b     0                           ; extent mask, EXM
-00:0001B1EB 00              	   315:     dc.b     0                           ; dummy fill
-00:0001B1EC 00BF            	   316:     dc.w     191                         ; DSM, (3 tracks * 1024 sectors * 128 bytes /2048)-1
-                            	   317:                            
-00:0001B1EE 00FF            	   318:     dc.w     255                         ; DRM, 256 directory entries
-00:0001B1F0 0000            	   319:     dc.w     0                           ; directory mask
-00:0001B1F2 0000            	   320:     dc.w     0                           ; permanent mounted drive, check size is zero
-00:0001B1F4 000C            	   321:     dc.w     12                          ; no track offset
-                            	   322:          
-                            	   323: ; use the battery-back RAM in ADC MPU as small RAMdisk, $C0000-$FFFFF
-                            	   324: ; disk parameter block
-                            	   325: ; choose a BLS of 1024
-                            	   326: ; 1024 sectors (128 byte sector) per track
-                            	   327: ; 8 sectors per block
-                            	   328: ; 2 tracks per drive 
-                            	   329: DPB2:    
-00:0001B1F6 0400            	   330:     dc.w     1024                        ; 1024 sectors per track
-00:0001B1F8 03              	   331:     dc.b     3                           ; block shift for BLS of 1024
-00:0001B1F9 07              	   332:     dc.b     7                           ; block mask for BLS of 1024
-00:0001B1FA 00              	   333:     dc.b     0                           ; extent mask, EXM
-00:0001B1FB 00              	   334:     dc.b     0                           ; dummy fill
-00:0001B1FC 00FF            	   335:     dc.w     255                         ; DSM, (2 tracks * 1024 sectors * 128 bytes /2048)-1
-                            	   336: ; force the block number to be words rather than bytes                           
-00:0001B1FE 007F            	   337:     dc.w     127                         ; DRM, 128 directory entries
-00:0001B200 0000            	   338:     dc.w     0                           ; directory mask
-00:0001B202 0000            	   339:     dc.w     0                           ; permanent mounted drive, check size is zero
-00:0001B204 0000            	   340:     dc.w     0                           ; no track offset
-                            	   341: 
-                            	   342: **X    .bss
-                            	   343: 
-                            	   344: DIRBUF:    
-00:0001B206 00              	   345:     ds.b     128                         ; directory buffer
-00:0001B207 *
-                            	   346: 
-                            	   347: ALV0:    
-00:0001B286 00              	   348: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
-00:0001B287 *
-                            	   349: ALV1:    
-00:0001B386 00              	   350: 	ds.b     256                         ; DSM/8 +1 = 128, round up to 256
-00:0001B387 *
-                            	   351: ALV2:    
-00:0001B486 00              	   352: 	ds.b     256                         ; DSM/8 +1 = 128, round up to 256
-00:0001B487 *
-                            	   353: 
+                            	   239: ; memory table must start on an even address
+                            	   240:               even
+00:0000017A 0001            	   241: MEMRGN        dc.w        1              ; 1 memory region
+                            	   242: ;              dc.l        $20000         ; right after the CP/M 
+00:0000017C 00002000        	   243:               dc.l        $02000         ; right after the rosco firmware 
+00:00000180 00013000        	   244:               dc.l        $13000         ; goes until $13000, 256K bytes
+                            	   245: ;			  dc.l        $A0000         ; goes until $C0000, 655K bytes  
+                            	   246: 
+                            	   247: ; disk parameter headers
+                            	   248: 
+                            	   249: DPH0:    
+00:00000184 00000000        	   250:     dc.l      0                          ; no sector translation table
+00:00000188 0000            	   251:     dc.w      0                          ; dummy
+00:0000018A 0000            	   252:     dc.w      0
+00:0000018C 0000            	   253:     dc.w      0
+00:0000018E 00000202        	   254:     dc.l      DIRBUF                     ; ptr to directory buffer
+00:00000192 000001D2        	   255:     dc.l      DPB0                       ; ptr to disk parameter block
+00:00000196 00000000        	   256:     dc.l      0                          ; permanent drive, no check vector
+00:0000019A 00000282        	   257:     dc.l      ALV0                       ; ptr to allocation vector
+                            	   258: 
+                            	   259: DPH1:
+00:0000019E 00000000        	   260:     dc.l     0                           ; no sector translation table
+00:000001A2 0000            	   261:     dc.w     0                           ; dummy
+00:000001A4 0000            	   262:     dc.w     0
+00:000001A6 0000            	   263:     dc.w     0
+00:000001A8 00000202        	   264:     dc.l     DIRBUF                      ; ptr to directory buffer
+00:000001AC 000001E2        	   265:     dc.l     DPB1                        ; ptr to disk parameter block
+00:000001B0 00000000        	   266:     dc.l     0                           ; permanent drive, no check vector
+00:000001B4 00000382        	   267:     dc.l     ALV1                        ; ptr to allocation vector
+                            	   268: 
+                            	   269: DPH2:
+00:000001B8 00000000        	   270:     dc.l     0                           ; no sector translation table
+00:000001BC 0000            	   271:     dc.w     0                           ; dummy
+00:000001BE 0000            	   272:     dc.w     0
+00:000001C0 0000            	   273:     dc.w     0
+00:000001C2 00000202        	   274:     dc.l     DIRBUF                      ; ptr to directory buffer
+00:000001C6 000001F2        	   275:     dc.l     DPB2                        ; ptr to disk parameter block
+00:000001CA 00000000        	   276:     dc.l     0                           ; permanent drive, no check vector
+00:000001CE 00000482        	   277:     dc.l     ALV2                        ; ptr to allocation vector
+                            	   278: 
+                            	   279: ; disk parameter block
+                            	   280: ; flash drive from $420000 to 59FFFF,
+                            	   281: ; choose a BLS of 2048
+                            	   282: ; 1024 sectors (128 byte sector) per track
+                            	   283: ; 16 sectors per block
+                            	   284: ; 12 tracks per drive 
+                            	   285: ; DPB0:    
+                            	   286: ;     dc.w     1024                        ; 1024 sectors per track
+                            	   287: ;     dc.b     4                           ; block shift for BLS of 2048
+                            	   288: ;     dc.b     15                          ; block mask for BLS of 2048
+                            	   289: ;     dc.b     0                           ; extent mask, EXM
+                            	   290: ;     dc.b     0                           ; dummy fill
+                            	   291: ;     dc.w     767                         ; DSM, (12 tracks * 1024 sectors * 128 bytes /2048)-1
+                            	   292:                            
+                            	   293: ;     dc.w     255                         ; DRM, 256 directory entries
+                            	   294: ;     dc.w     0                           ; directory mask
+                            	   295: ; 	dc.w     0                           ; permanent mounted drive, check size is zero
+                            	   296: ;     dc.w     0                           ; no track offset
+                            	   297: 
+                            	   298: ; hack in a drive 0 that looked like old drive 1
+                            	   299: DPB0:    
+00:000001D2 0400            	   300:     dc.w     1024                        ; 1024 sectors per track
+00:000001D4 04              	   301:     dc.b     4                           ; block shift for BLS of 2048
+00:000001D5 0F              	   302:     dc.b     15                          ; block mask for BLS of 2048
+00:000001D6 00              	   303:     dc.b     0                           ; extent mask, EXM
+00:000001D7 00              	   304:     dc.b     0                           ; dummy fill
+00:000001D8 00BF            	   305:     dc.w     191                         ; DSM, (3 tracks * 1024 sectors * 128 bytes /2048)-1
+                            	   306:                            
+00:000001DA 00FF            	   307:     dc.w     255                         ; DRM, 256 directory entries
+00:000001DC 0000            	   308:     dc.w     0                           ; directory mask
+00:000001DE 0000            	   309:     dc.w     0                           ; permanent mounted drive, check size is zero
+00:000001E0 000C            	   310:     dc.w     12                          ; no track offset
+                            	   311: 
+                            	   312: 
+                            	   313: ; flash drive from $5A0000 to $5FFFFF
+                            	   314: ; choose a BLS of 2048
+                            	   315: ; 1024 sectors (128 byte sector) per track
+                            	   316: ; 16 sectors per block
+                            	   317: ; 3 tracks per drive 
+                            	   318: DPB1:    
+00:000001E2 0400            	   319:     dc.w     1024                        ; 1024 sectors per track
+00:000001E4 04              	   320:     dc.b     4                           ; block shift for BLS of 2048
+00:000001E5 0F              	   321:     dc.b     15                          ; block mask for BLS of 2048
+00:000001E6 00              	   322:     dc.b     0                           ; extent mask, EXM
+00:000001E7 00              	   323:     dc.b     0                           ; dummy fill
+00:000001E8 00BF            	   324:     dc.w     191                         ; DSM, (3 tracks * 1024 sectors * 128 bytes /2048)-1
+                            	   325:                            
+00:000001EA 00FF            	   326:     dc.w     255                         ; DRM, 256 directory entries
+00:000001EC 0000            	   327:     dc.w     0                           ; directory mask
+00:000001EE 0000            	   328:     dc.w     0                           ; permanent mounted drive, check size is zero
+00:000001F0 000C            	   329:     dc.w     12                          ; no track offset
+                            	   330:          
+                            	   331: ; use the battery-back RAM in ADC MPU as small RAMdisk, $C0000-$FFFFF
+                            	   332: ; disk parameter block
+                            	   333: ; choose a BLS of 1024
+                            	   334: ; 1024 sectors (128 byte sector) per track
+                            	   335: ; 8 sectors per block
+                            	   336: ; 2 tracks per drive 
+                            	   337: DPB2:    
+00:000001F2 0400            	   338:     dc.w     1024                        ; 1024 sectors per track
+00:000001F4 03              	   339:     dc.b     3                           ; block shift for BLS of 1024
+00:000001F5 07              	   340:     dc.b     7                           ; block mask for BLS of 1024
+00:000001F6 00              	   341:     dc.b     0                           ; extent mask, EXM
+00:000001F7 00              	   342:     dc.b     0                           ; dummy fill
+00:000001F8 00FF            	   343:     dc.w     255                         ; DSM, (2 tracks * 1024 sectors * 128 bytes /2048)-1
+                            	   344: ; force the block number to be words rather than bytes                           
+00:000001FA 007F            	   345:     dc.w     127                         ; DRM, 128 directory entries
+00:000001FC 0000            	   346:     dc.w     0                           ; directory mask
+00:000001FE 0000            	   347:     dc.w     0                           ; permanent mounted drive, check size is zero
+00:00000200 0000            	   348:     dc.w     0                           ; no track offset
+                            	   349: 
+                            	   350: **X    .bss
+                            	   351: 
+                            	   352: DIRBUF:    
+00:00000202 00              	   353:     ds.b     128                         ; directory buffer
+00:00000203 *
+                            	   354: 
+                            	   355: ALV0:    
+00:00000282 00              	   356: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+00:00000283 *
+                            	   357: ALV1:    
+00:00000382 00              	   358: 	ds.b     256                         ; DSM/8 +1 = 128, round up to 256
+00:00000383 *
+                            	   359: ALV2:    
+00:00000482 00              	   360: 	ds.b     256                         ; DSM/8 +1 = 128, round up to 256
+00:00000483 *
+                            	   361: 
 
 
 Symbols by name:
-ALV0                             A:0001B286
-ALV1                             A:0001B386
-ALV2                             A:0001B486
-BIOSBASE                         A:0001B024
-CONIN                            A:0001B090
-CONOUT                           A:0001B0A6
-CONSTAT                          A:0001B084
-CURCFSECT                        A:0001B170
-DIRBUF                           A:0001B206
-DMA                              A:0001B178
-DPB0                             A:0001B1D6
-DPB1                             A:0001B1E6
-DPB2                             A:0001B1F6
-DPH0                             A:0001B188
-DPH1                             A:0001B1A2
-DPH2                             A:0001B1BC
+ALV0                            00:00000282
+ALV1                            00:00000382
+ALV2                            00:00000482
+BIOSBASE                        00:0000001E
+CONIN                           00:0000008C
+CONOUT                          00:000000A2
+CONSTAT                         00:00000080
+CURCFSECT                       00:0000016C
+DIRBUF                          00:00000202
+DMA                             00:00000174
+DPB0                            00:000001D2
+DPB1                            00:000001E2
+DPB2                            00:000001F2
+DPH0                            00:00000184
+DPH1                            00:0000019E
+DPH2                            00:000001B8
 DPHLEN                           E:0000001A
-FLUSH                            A:0001B142
-GETDATA                          A:0001B11C
-GETIOB                           A:0001B14E
-GETSEG                           A:0001B146
-HOME                             A:0001B0B6
-LISTST                           A:0001B0B0
-LSTOUT                           A:0001B0AE
+FLUSH                           00:0000013E
+GETDATA                         00:00000118
+GETIOB                          00:0000014A
+GETSEG                          00:00000142
+HOME                            00:000000B2
+LISTST                          00:000000AC
+LSTOUT                          00:000000AA
 MAXDSK                           E:00000003
-MEMRGN                           A:0001B17E
-NOSET                            A:0001B16C
-PUN                              A:0001B0AE
-RAMDRV                           A:0001B11C
-RAMDRVR                          A:0001B0FA
-RAMDRVW                          A:0001B134
-RDR                              A:0001B0AE
-READ                             A:0001B0F8
-RESV                             A:0001B16F
-RESV1                            A:0001B17D
-SECTOR                           A:0001B176
-SECTRAN                          A:0001B0EC
-SELCODE                          A:0001B17C
-SELDRV                           A:0001B16E
-SELDSK                           A:0001B0BE
-SELRTN                           A:0001B0DA
-SETDMA                           A:0001B0F0
-SETEXC                           A:0001B152
-SETIOB                           A:0001B150
-SETSEC                           A:0001B0E4
-SETTRK                           A:0001B0DC
-SETUPRD                          A:0001B104
-TRACK                            A:0001B174
-TRAPHNDL                         A:0001B012
-TRAPNG                           A:0001B022
-WBOOT                            A:0001B080
-WRBAD                            A:0001B13E
-WRITE                            A:0001B128
+MEMRGN                          00:0000017A
+NOSET                           00:00000168
+PUN                             00:000000AA
+RAMDRV                          00:00000118
+RAMDRVR                         00:000000F6
+RAMDRVW                         00:00000130
+RDR                             00:000000AA
+READ                            00:000000F4
+RESV                            00:0000016B
+RESV1                           00:00000179
+SECTOR                          00:00000172
+SECTRAN                         00:000000E8
+SELCODE                         00:00000178
+SELDRV                          00:0000016A
+SELDSK                          00:000000BA
+SELRTN                          00:000000D6
+SETDMA                          00:000000EC
+SETEXC                          00:0000014E
+SETIOB                          00:0000014C
+SETSEC                          00:000000E0
+SETTRK                          00:000000D8
+SETUPRD                         00:00000100
+TRACK                           00:00000170
+TRAPHNDL                        00:0000000C
+TRAPNG                          00:0000001C
+WBOOT                           00:0000007A
+WRBAD                           00:0000013A
+WRITE                           00:00000124
 _ccp                             E:000150BC
-_init                            A:0001B000 EXP
+_init                           00:00000000 EXP
 
 Symbols by value:
+00000000 _init
 00000003 MAXDSK
+0000000C TRAPHNDL
 0000001A DPHLEN
+0000001C TRAPNG
+0000001E BIOSBASE
+0000007A WBOOT
+00000080 CONSTAT
+0000008C CONIN
+000000A2 CONOUT
+000000AA RDR
+000000AA PUN
+000000AA LSTOUT
+000000AC LISTST
+000000B2 HOME
+000000BA SELDSK
+000000D6 SELRTN
+000000D8 SETTRK
+000000E0 SETSEC
+000000E8 SECTRAN
+000000EC SETDMA
+000000F4 READ
+000000F6 RAMDRVR
+00000100 SETUPRD
+00000118 GETDATA
+00000118 RAMDRV
+00000124 WRITE
+00000130 RAMDRVW
+0000013A WRBAD
+0000013E FLUSH
+00000142 GETSEG
+0000014A GETIOB
+0000014C SETIOB
+0000014E SETEXC
+00000168 NOSET
+0000016A SELDRV
+0000016B RESV
+0000016C CURCFSECT
+00000170 TRACK
+00000172 SECTOR
+00000174 DMA
+00000178 SELCODE
+00000179 RESV1
+0000017A MEMRGN
+00000184 DPH0
+0000019E DPH1
+000001B8 DPH2
+000001D2 DPB0
+000001E2 DPB1
+000001F2 DPB2
+00000202 DIRBUF
+00000282 ALV0
+00000382 ALV1
+00000482 ALV2
 000150BC _ccp
-0001B000 _init
-0001B012 TRAPHNDL
-0001B022 TRAPNG
-0001B024 BIOSBASE
-0001B080 WBOOT
-0001B084 CONSTAT
-0001B090 CONIN
-0001B0A6 CONOUT
-0001B0AE RDR
-0001B0AE PUN
-0001B0AE LSTOUT
-0001B0B0 LISTST
-0001B0B6 HOME
-0001B0BE SELDSK
-0001B0DA SELRTN
-0001B0DC SETTRK
-0001B0E4 SETSEC
-0001B0EC SECTRAN
-0001B0F0 SETDMA
-0001B0F8 READ
-0001B0FA RAMDRVR
-0001B104 SETUPRD
-0001B11C GETDATA
-0001B11C RAMDRV
-0001B128 WRITE
-0001B134 RAMDRVW
-0001B13E WRBAD
-0001B142 FLUSH
-0001B146 GETSEG
-0001B14E GETIOB
-0001B150 SETIOB
-0001B152 SETEXC
-0001B16C NOSET
-0001B16E SELDRV
-0001B16F RESV
-0001B170 CURCFSECT
-0001B174 TRACK
-0001B176 SECTOR
-0001B178 DMA
-0001B17C SELCODE
-0001B17D RESV1
-0001B17E MEMRGN
-0001B188 DPH0
-0001B1A2 DPH1
-0001B1BC DPH2
-0001B1D6 DPB0
-0001B1E6 DPB1
-0001B1F6 DPB2
-0001B206 DIRBUF
-0001B286 ALV0
-0001B386 ALV1
-0001B486 ALV2
