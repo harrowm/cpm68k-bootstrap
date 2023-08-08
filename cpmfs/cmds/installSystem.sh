@@ -14,7 +14,7 @@ BOOT=$2
 
 FMT=4mb-hd
 
-cpmrm -f ${FMT}-0 $IMAGE 0:$(basename $BOOT)
+cpmrm -T raw -f ${FMT}-0 $IMAGE 0:$(basename $BOOT)
 
 echo "Copying $(basename $BOOT) to $IMAGE, partition 0"
-cpmcp -f ${FMT}-0 $IMAGE $BOOT 0:
+cpmcp -T raw -f ${FMT}-0 $IMAGE $BOOT 0:

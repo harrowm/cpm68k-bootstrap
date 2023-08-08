@@ -23,7 +23,7 @@ do
 
   if [[ -d "$DISK" ]]; then
     echo "Copying $DISK to partition $TARGET"
-    cpmcp -t -f ${FMT}-$TARGET $IMAGE $DISK/* 0:
+    cpmcp -T raw -t -f ${FMT}-$TARGET $IMAGE $DISK/* 0:
   fi
 
   n=$(( $n + 1))

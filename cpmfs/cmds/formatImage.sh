@@ -24,12 +24,13 @@ echo "Disk size: $DISK_SIZE bytes"
 echo ""
 
 echo "Formatting $DEF image -> $IMAGE"
-dd if=/dev/zero bs=$DISK_SIZE count=1 | tr '\0' '\345' > $IMAGE
+mkfs.cpm -f 4mb-hd-0 $IMAGE
+#dd if=/dev/zero bs=$DISK_SIZE count=1 | tr '\0' '\345' > $IMAGE
 
 echo "Definition: ${DEF}" > $LABEL
 echo "Created:    $(date)" >> $LABEL
 unix2dos $LABEL
 echo -e -n '\x1a' >> $LABEL
   
-cpmcp -f ${DEF} $IMAGE $LABEL 0:
+cpmcp -T raw -f ${DEF} $IMAGE $LABEL 0:
 

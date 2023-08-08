@@ -18,12 +18,7 @@ n=2
 while [ $n -lt $# ]
 do
   echo "Copying ${args[$n]} to $IMAGE, definition $DEF"
-  cpmcp -t -f ${DEF} $IMAGE ${args[$n]} 0:
+  cpmcp -T raw -t -f ${DEF} $IMAGE ${args[$n]} 0:
   
   n=$(( $n + 1))
 done
-
-#cpmrm -f ${FMT}-0 $IMAGE 0:$(basename $BOOT)
-
-#echo "Copying $(basename $BOOT) to $IMAGE, partition 0"
-#cpmcp -f ${FMT}-0 $IMAGE $BOOT 0:
