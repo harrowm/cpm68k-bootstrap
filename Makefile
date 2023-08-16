@@ -1,5 +1,5 @@
 # SUBDIRS := bios cpmfs boot
-SUBDIRS := bios boot disk
+SUBDIRS := bios cpmfs boot disk
 
 
 clean all: $(SUBDIRS)

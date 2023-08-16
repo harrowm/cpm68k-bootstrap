@@ -30,7 +30,7 @@ echo ""
 
 echo "Formatting a $PARTITIONS partition image -> $IMAGE"
 #dd if=/dev/zero bs=$DISK_SIZE count=1 | tr '\0' '\345' > $IMAGE
-mkfs.cpm -f 4mb-hd-0 $IMAGE
+mkfs.cpm -f 4mb-hd $IMAGE
 #sleep 1
 n=0
 while [ $n -lt $PARTITIONS ]
@@ -41,7 +41,7 @@ do
   echo -e -n '\x1a' >> $LABEL
   echo $n
   echo $IMAGE
-  cpmcp -T raw -f ${FMT}-$n $IMAGE $LABEL 0:
+  cpmcp -T raw -f ${FMT} $IMAGE $LABEL 0:
 
   n=$(( $n + 1))
 done

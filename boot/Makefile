@@ -50,14 +50,14 @@ OBJDUMP = m68k-elf-objdump
 OBJCOPY = m68k-elf-objcopy
 SIZE = m68k-elf-size
 NM = m68k-elf-nm
- 
+
 all: target/boot.bin
 
 # --------------------------------------------------------------------------------
 # M68000 CPM Boot Loader
 # --------------------------------------------------------------------------------
 obj/kmain.o: kmain.asm | obj
-	$(VASM) $(VASMFLAGS) -L $(basename $@).lst -o $@ $<
+	$(VASM) $(VASMFLAGS) -DSREC_LENGTH=25388 -DBIOS_LENGTH=812 -DDISK_LENGTH=10240 -L $(basename $@).lst -o $@ $<
 
 obj/boot.elf: obj/kmain.o | obj
 	$(LD) -T $(LDSCRIPT) $(LDFLAGS) obj/kmain.o $(LIBS) -o $@
@@ -76,6 +76,3 @@ obj:
 
 target:
 	mkdir -p $@
-
-
-
