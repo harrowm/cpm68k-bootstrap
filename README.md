@@ -34,7 +34,8 @@ There are some gaps in the memory map and this could be further optimised.  Note
 
 ## References:
 - [Details on the board](https://rosco-m68k.com/)
-- [Links to documents on cpm68k and David Wildie's work on a S100 SBC on which this code is derived.](http://www.s100computers.com/Software%20Folder/CPM68K/CPM68K%20Software.htm https://github.com/dwildie/cpm-68k)
+- [Links to documents on cpm68k and Damien Wildie's work on a S100 SBC on which this code is derived.](http://www.s100computers.com/Software%20Folder/CPM68K/CPM68K%20Software.htm)
+- [Damien's github page](https://github.com/dwildie/cpm-68k)
 - [Plasmodes' work on the mpu302.](https://hackaday.io/project/28504-reverse-engineering-soneplex-spx-mpu-sbc/log/71892-port-cpm-68k-to-mpu302-part-1)
 - [General info, hints and tips.](https://www.retrobrewcomputers.org/forum/index.php?t=msg&th=222&goto=3703&)
 - [The main source for all things cpm.](http://www.cpm.z80.de/)
