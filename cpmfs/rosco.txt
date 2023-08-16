@@ -1,0 +1,4 @@
+A basic CPM loader for rosco_m68k ..
+Only working from RAM disk ..
+Only tested on MAME ..
+.. but its a start

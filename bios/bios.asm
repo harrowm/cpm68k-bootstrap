@@ -195,8 +195,8 @@ SETUPRD:
 WRITE:
 ; Write one sector to requested disk, track, sector from dma address
 ; Both drive A & B are RAM drive
-    cmp.b  #2,SELDRV                     ; only drive C can be written
-    bne    WRBAD
+    ;cmp.b  #2,SELDRV                     ; only drive C can be written
+    ;bne    WRBAD
     bsr    SETUPRD                       ; translate track/sector values into RAM loc
 RAMDRVW:
     move.l (A1)+,(A0)+

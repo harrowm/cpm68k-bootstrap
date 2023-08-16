@@ -31,7 +31,8 @@ clean:
 $(DIR_TARGET)/disk1.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	#$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
-	#$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(CPM_1_3_SRC)/DISK1/README.TXT
+	#$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(CPM_1_3_SRC)/DISK3/ED.REL
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	#$(SHELL) $(CMDS)/installSystem.sh $@ $(BOOT_FILE)
 
 #$(DIR_TARGET)/disk10.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)

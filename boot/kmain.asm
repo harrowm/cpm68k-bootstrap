@@ -57,4 +57,4 @@ disk_start:         incbin "../cpmfs/target/disk1.img"
 ;disk_end:      
 ;disk_length:        dc.w   (disk_end - disk_start)
 
-strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.3", 0
+strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.1", 0
