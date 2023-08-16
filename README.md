@@ -9,8 +9,8 @@ The main sources for the project are listed below.  The code is really a amash-u
 This code was developed on a M1 MacBook Air.  Homebrew was the package manager.
 - rosco_m68k development tool chain - see references.
 - MAME - see references (to do, explain MAME pathc to get SDCARD working, explain machine specific file).
-- cpmtools - installed with "bre install cpmtools".  Note that the homebrew code makes use of libraw and hence I had to change all of Damien's routines that use cpmtools to include the option "-T raw". Copy the diskdefs used in the project across to the main diskdefs file after installation.  Note this the specific directory for the M1 version of homebrew .. if you are on a x86 then the direwctory is different .. cat 68k-diskdefs.txt >> /opt/homebrew/share/diskdefs
-- mtools - installed with "brew install mtools".  Used to create the FAT32 sdcard image used by MAME.
+- cpmtools - installed with `brew install cpmtools`.  Note that the homebrew code makes use of libraw and hence I had to change all of Damien's routines that use cpmtools to include the option `-T raw`. Copy the diskdefs used in the project across to the main diskdefs file after installation.  Note this the specific directory for the M1 version of homebrew .. if you are on a x86 then the direwctory is different .. `cat 68k-diskdefs.txt >> /opt/homebrew/share/diskdefs`
+- mtools - installed with `brew install mtools`.  Used to create the FAT32 sdcard image used by MAME.
 
 ## Memory Map
 The goal was to re-use the rosco_m68k firmware as much as possible.  cpm68k comes in two flavours - one that loads cpm at 0x400 and the other at 0x15000.  Rosco firmware reserves upto 0x2000, so the 0x15000 option is used. 
@@ -33,7 +33,7 @@ There are some gaps in the memory map and this could be further optimised.  Note
 - disk
 
 ## References:
-- Details on the board: https://rosco-m68k.com/
+- [Details on the board] (https://rosco-m68k.com/)
 - Links to documents on cpm68k and David Wildie's work on a S100 SBC on which this code is derived. http://www.s100computers.com/Software%20Folder/CPM68K/CPM68K%20Software.htm https://github.com/dwildie/cpm-68k
 - Plasmodes' work on the mpu302. https://hackaday.io/project/28504-reverse-engineering-soneplex-spx-mpu-sbc/log/71892-port-cpm-68k-to-mpu302-part-1
 - General info, hints and tips: https://www.retrobrewcomputers.org/forum/index.php?t=msg&th=222&goto=3703&
