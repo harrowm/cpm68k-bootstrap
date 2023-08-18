@@ -36,7 +36,6 @@ SYSLIBDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/lib
 # 	| sed 's/:/m68000\/ -L/g')m68000/
 
 LD       = m68k-elf-ld
-LD       = m68k-elf-ld
 LDFLAGS   = -L $(SYSLIBDIR) --gc-sections #--oformat=elf32-m68k
 #LDFLAGS  += $(GCC_LIBS)
 

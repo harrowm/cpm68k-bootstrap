@@ -20,10 +20,10 @@ The way programs are loaded from sdcard on the rosco is as follows: the program 
 - 0x0 to 0x2000 - rosco firmware
 - 0x15000 - 0x1AFFF - CPM and scratch space
 - 0x1B000 - 0x1BFFF - bios, actually the bios is less than 1k at the moment
-- 0x1C000 - 0xA0000 - CPM TPA or memory available to the user of cpm to run programs (0x84000 or 540,672 bytes)
+- 0x20000 - 0xA0000 - CPM TPA or memory available to the user of cpm to run programs (0x80000 or 524,228 bytes)
 - 0xC0000 - 0xFFFFF - RAM disk, this gives a max disk size of 16383 bytes (0x3FFF)
 
-There are some gaps in the memory map and this could be further optimised.  Note that because of the loading process, the total size of the file CPM plus bios plus ram disk image cant be more thasn 0x38000 (229,376 bytes) as the loaded program has to be relocated from 0x40000 to 0x2000.
+There are some gaps in the memory map and this could be further optimised.  Note that because of the loading process, the total size of the file CPM plus bios plus ram disk image cant be more than 0x38000 (229,376 bytes) as the loaded program has to be relocated from 0x40000 to 0x2000.
 
 ## Code structure
 A top level `makefile` sequentially goes through each of the following directories and builds the subprojects: 
@@ -31,6 +31,11 @@ A top level `makefile` sequentially goes through each of the following directori
 - boot - this creates `target/boot.bin` which is a program that can be loaded directly from a sdcard or similar.  The program contains the binary files for cpm, bios and ram disk.  When the program runs it reclocates cpm code to 0x15000, the bios to 0x1B000 and the ram disk to 0xC0000.  It then calls cpm at 0x15000.
 - cpmfs - this creates a CPM disk image for loading into ram, `target/disk1.img`.  To load into available memory from 0xC0000 this disk is very limited in size.  At the moment it just contains a text file for the partition label and a small welcome file.
 - disk - this creates a FAT32 file image `target/rosco.img` that can be saved to a sdcard or loaded into MAME.  the boot file is saved as `roscode1.bin` so that it is auto run on machine start.  The CPM disk image `disk1.img` is also copied across to the sdcard image.  The last part of the makefile prints the command linkt o start MAME.  This assumes that MAME is imstalled in a directory at the same level as this project.
+
+## Limitations
+- One CPM drive image in the root directory of the sd card called `cmpdisk.img`
+- Assume 512 bytes per sector (I think this is standard for all sd cards)
+- Must be run from the sd card - doesn't support the use of an IDE drive (yet)
 
 ## References:
 - [Details on the board](https://rosco-m68k.com/)

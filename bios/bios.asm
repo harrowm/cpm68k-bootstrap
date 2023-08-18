@@ -1,25 +1,110 @@
 ; Very simple cpm68k bios
 ; Malcolm Harrow August 2023
 
-; TO DO
-; Change start positions of ram disks in read
-; sort out org instruction
-; Change MEMRGN
-; Change disk parameter tables
-
-
-; 7/29/17, fork from rev 3 of TinyBIOS for Tiny68000
-; This BIOS assumes CPM15000 will be loaded
-; It also assume the disk is reside in flash from location $420000 to $5FFFFF
-; The disk already contains CP/M 68K distribution files
-
-
 _ccp     equ $150BC                     ; hard location for _ccp of CPM15000.SR
 
 _init::    
+
+    ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
+    ; need to find the starting block of the CPM disk image on the sd card, or offset
+    ; to do this we will trawl through the FAT32 boot record etc
+
+    ; to do this:
+    ;   - read the MBR, block 0 and note:
+    ;     - number of reserved sectors, 0x0E, word (eg 20 00)
+    ;     - logical sectors per FAT, 0x24, long  (eg f1 03 00 00)
+    ;     - number of fats, 0x10, byte (eg 02)
+    ;   - This enables us to calculate:
+    ;     - start of FAT table (sector after number of reserved sectors - 32 or 0x4000
+    ;     - start of root directory,  Logical sectors per FAT (0x24) * Number of FATs (0x10) + Reserved logical sectors (0xe) = 0x802 or 0x100400
+    ;   - The root directory is arranged 32 bytes per entry.  We will assume our CPM disk image is in the root and called cpmdisk.img.  So 8 entries in a 512 byte sector
+    ;   
+    ;  
+
+    ; check and initialise the sd card
+    move.l  #0,D0                                       ; check sd card support
+    trap    #13
+    cmp.l   #$1234FEDC,D0                              ; check magic return
+    beq     .noerr1
+    lea     msgNoSdCardSupport,A0
+    jmp     .errExit
+    
+.noerr1:
+;     lea     sd,A1
+;     move.l  #1,D0                                       ; init sd card and get sd card structure back. 
+;     trap    #13
+;.malcolm: jmp .malcolm
+;     cmp.l   #0,D0                                       ; check return
+
+
+
+;     beq     .noerr2
+;     lea     msgNoSdCardInit,A0
+;     jmp     .errExit
+
+;.noerr2:
+;    lea     sd,A1
+;    move.l  #2,D0                                       ; read the MBR from the sd card 
+;    clr.l   D1                                          ; read block 0, mbr
+;    lea     sdBuf,A2
+;    trap    #13
+;    bne     .noerr3
+;    lea     msgNoSdCardRead,A0
+;    jmp     .errExit
+
+.noerr3:
+
+
+    
+;    sector = sector of start of root directory
+;    entry = 0
+;    while (1) {
+;      offset = entry % 8
+;      if offset == 0 {
+;        // read next sector
+;        read next sector
+;        increment sector
+;      };;
+;
+;      directory_entry = offset * 32 plus buffer start
+;
+;      if directory_entry[0] == 0 { // end of root directory
+;        message failure
+;        return failure
+;      }
+;
+;      if directory_entry[0] == 0xE5 { // previously erased entry
+;        continue
+;      }
+;
+;      if directory_entry[0xb] & 0x10 { // subdirectory
+;        continue
+;      }
+;
+;      if directory entry[0xb] == 0xf { // record contains a long file name
+;        continue
+;      }
+;
+;      if strncmp(directory entry, "CPMDISK IMG", 11) {
+;        // found file, might have to ignore case here, lets see
+;        // record sector file starts and file length
+;        block = entry[20,21] << 16 + entry[26,27]
+;        filelength = entry[28,29,30,31]
+;        // both of these are store lsb first eg length of 0x7e84 is stored 84 7e 00 00
+;        return success
+;      }
+;      entry++
+;    }
+    
     move.l  #TRAPHNDL,$8c               ; set up trap #3 handler
     clr.l   D0                          ; log on disk A, user 0
     rts
+
+.errExit:
+    move.l  #1,D1                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
+    trap    #14                         ; TRAP to firmware
+    move.l  #1,D0                       ; signal error
+g    rts
 
 TRAPHNDL:
     cmpi    #23,D0                      ; Function call in range ?
@@ -247,8 +332,8 @@ RESV1         dc.b        0              ; reserve byte, padding
 ; memory table must start on an even address
               even
 MEMRGN        dc.w        1              ; 1 memory region
-              dc.l        $1C000         ; right after the CP/M 
-			  dc.l        $A0000         ; 540K bytes, more than enough for bootstrapping  
+              dc.l        $20000         ; after the CP/M 
+			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
 
 ; disk parameter header
 DPH0:    
@@ -290,3 +375,21 @@ DIRBUF:
 
 ALV0:    
 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+msgNoSdCardSupport:
+    dc.b     "error: No SD card support detected",0
+
+msgNoSdCardInit:
+    dc.b     "error: Unable to initialize SD card",0
+
+msgNoSdCardRead:
+    dc.b     "error: Unable to read SD card",0
+
+strPath:
+    dc.b     "disk1.img",0               ; needs to be a path not a filename (leading /)
+
+sdBuf:    
+	ds.b     512                         ; buffer to read/write sectors to sd card
+
+sd:
+    ds.b     64                          ; needs to be large enough to hold a sd card structure
