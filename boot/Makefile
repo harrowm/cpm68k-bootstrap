@@ -12,12 +12,12 @@ ASFLAGS += -alms
 ASFLAGS += -I../ 
 ASFLAGS += --defsym IS_68000=1
 
-CC       = m68k-elf-gcc
-CCFLAGS += -Wall
-CCFLAGS += -m68000
-CCFLAGS += -nostdlib
-CCFLAGS += -nodefaultlibs
-CCFLAGS += -I../include
+#CC       = m68k-elf-gcc
+#CCFLAGS += -Wall
+#CCFLAGS += -m68000
+#CCFLAGS += -nostdlib
+#CCFLAGS += -nodefaultlibs
+#CCFLAGS += -I../include
 
 SYSINCDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/include
 SYSLIBDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/lib
@@ -28,14 +28,14 @@ else
 LDSCRIPT?=$(SYSLIBDIR)/ld/serial/rosco_m68k_program.ld
 endif
 
-GCC_LIBS=$(shell $(CC) --print-search-dirs 															\
-	| grep libraries:\ =		\
-	| sed 's/libraries: =/-L/g' 	\
-	| sed 's/:/m68000\/ -L/g')m68000/
+#GCC_LIBS=$(shell $(CC) --print-search-dirs 															\
+#	| grep libraries:\ =		\
+#	| sed 's/libraries: =/-L/g' 	\
+#	| sed 's/:/m68000\/ -L/g')m68000/
 
 LD       = m68k-elf-ld
 LDFLAGS   = -L $(SYSLIBDIR) --gc-sections --oformat=elf32-m68k
-LDFLAGS  += $(GCC_LIBS)
+#LDFLAGS  += $(GCC_LIBS)
 
 DEFINES=-DROSCO_M68K
 VASM=vasmm68k_mot
@@ -44,7 +44,7 @@ VASMFLAGS=-Felf -m68010 -quiet -Lnf $(DEFINES)
 LIBS	  = -lrosco_m68k
 LIBS	 += -lsdfat
 LIBS	 += -lstart_serial
-LIBS     += -lgcc
+#LIBS     += -lgcc
 
 OBJDUMP = m68k-elf-objdump
 OBJCOPY = m68k-elf-objcopy

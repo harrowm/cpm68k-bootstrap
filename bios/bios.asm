@@ -30,8 +30,8 @@ _init::
     jmp     .errExit
     
 .noerr1:
-;     lea     sd,A1
-;     move.l  #1,D0                                       ; init sd card and get sd card structure back. 
+     lea     sd,A1
+     move.l  #1,D0                                       ; init sd card and get sd card structure back. 
 ;     trap    #13
 ;.malcolm: jmp .malcolm
 ;     cmp.l   #0,D0                                       ; check return

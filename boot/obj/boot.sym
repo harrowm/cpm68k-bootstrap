@@ -108,9 +108,9 @@
 000020c4 T _postinit_end
 000020d0 T kmain
 00002130 t srec_start
-00008701 t srec_end
+00008707 t srec_end
 00008710 t bios_start
-00008ce1 t bios_end
+00008ce7 t bios_end
 00008cf0 t disk_start
 0000bcf0 t disk_end
 0000bcf0 t strBootMsg

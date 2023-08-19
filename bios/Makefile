@@ -6,17 +6,6 @@ endif
 
 -include $(ROSCO_M68K_DIR)/user.mk
 
-# AS       = m68k-elf-as
-# ASFLAGS += -m68000
-# ASFLAGS += -alms
-# ASFLAGS += --defsym IS_68000=1
-
-# CC       = m68k-elf-gcc
-# CCFLAGS += -Wall
-# CCFLAGS += -m68000
-# CCFLAGS += -nostdlib
-# CCFLAGS += -nodefaultlibs
-
 DEFINES=-DROSCO_M68K
 VASM=vasmm68k_mot
 VASMFLAGS=-Felf -m68010 -quiet -Lnf $(DEFINES)
@@ -24,35 +13,15 @@ VASMFLAGS=-Felf -m68010 -quiet -Lnf $(DEFINES)
 SYSINCDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/include
 SYSLIBDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/lib
 
-# ifneq ($(ROSCO_M68K_HUGEROM),false)
-# LDSCRIPT?=$(SYSLIBDIR)/ld/serial/hugerom_rosco_m68k_program.ld
-# else
-# LDSCRIPT?=$(SYSLIBDIR)/ld/serial/rosco_m68k_program.ld
-# endif
-
-# GCC_LIBS=$(shell $(CC) --print-search-dirs 															\
-# 	| grep libraries:\ =		\
-# 	| sed 's/libraries: =/-L/g' 	\
-# 	| sed 's/:/m68000\/ -L/g')m68000/
-
 LD       = m68k-elf-ld
-LDFLAGS   = -L $(SYSLIBDIR) --gc-sections #--oformat=elf32-m68k
-#LDFLAGS  += $(GCC_LIBS)
+LDFLAGS   = -L $(SYSLIBDIR) --gc-sections
 
 LIBS	  = -lrosco_m68k
-#LIBS	 += -lsdfat
-#LIBS     += -lgcc
-
-
 
 all: target/bios.sr.bin #target/bios.srec
 
 %.s:	%.c
 	$(CC) $(CCFLAGS) -S $<
-
-# --------------------------------------------------------------------------------
-# M68K CPM Bios
-# --------------------------------------------------------------------------------
 
 obj/%.o: %.asm | obj
 	$(VASM) $(VASMFLAGS) -L $(basename $@).lst -o $@ $<

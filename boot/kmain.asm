@@ -1,6 +1,6 @@
 ; *--------------------------------------------------------------------------------
 ; * Load the srec file and jump to the start point to boot cpm68k
-; * Malcolm Harrow March 2022  https://github.com/harrowm
+; * Malcolm Harrow March 2022 to August 2023 !!!  https://github.com/harrowm
 ; *--------------------------------------------------------------------------------
 
                     section .text
@@ -49,4 +49,4 @@ bios_end:
 disk_start:         incbin "../cpmfs/target/disk1.img" 
 disk_end:      
 
-strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.1", 0
+strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.2", 0
