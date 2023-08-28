@@ -2,6 +2,7 @@ target/rosco.img: ../boot/target/boot.bin | target
 	# Create a 64Mb FAT32 disk and copy in the files
 	# brew install mtools
 	cp ../boot/target/boot.bin files/roscode1.bin
+	cp ../cpmfs/target/disk1.img files/CPMDISK.IMG	
 	dd if=/dev/zero of=target/rosco.img  bs=1M count=64
 	mformat -i target/rosco.img -F :: 
 	mcopy -i target/rosco.img files/* ::
