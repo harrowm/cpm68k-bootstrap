@@ -23,17 +23,21 @@ RM    			:= rm
 SHELL 			:= /bin/bash
 
 #all: $(DIR_TARGET)/disk1.img $(DIR_TARGET)/disk10.img $(DIR_TARGET)/diskBase.img $(DIR_TARGET)/diskAll.img $(DIR_TARGET)/drive_a.img $(DIR_TARGET)/drive_b.img $(DIR_TARGET)/drive_c.img $(DIR_TARGET)/drive_d.img
-all: $(DIR_TARGET)/disk1.img 
+all: $(DIR_TARGET)/disk1.img $(DIR_TARGET)/disk2.img 
 
 clean:
 	$(RM) -rf $(DIR_TARGET)/*
 
+# A very small disk suitable for RAM disk with a couple of test files
 $(DIR_TARGET)/disk1.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
-	#$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
-	#$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(CPM_1_3_SRC)/DISK3/ED.REL
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
-	#$(SHELL) $(CMDS)/installSystem.sh $@ $(BOOT_FILE)
+	
+# A full copy of CPM disk 1, confusingly on disk2.img
+$(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
+	
 
 #$(DIR_TARGET)/disk10.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 #	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 10

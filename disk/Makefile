@@ -2,11 +2,16 @@ target/rosco.img: ../boot/target/boot.bin | target
 	# Create a 64Mb FAT32 disk and copy in the files
 	# brew install mtools
 	cp ../boot/target/boot.bin files/roscode1.bin
-	cp ../cpmfs/target/disk1.img files/CPMDISK.IMG	
+	
+	# why is this copy here - to test what happens if a file is on the directory before CMPDISK.IMG 
+	# this didn't initially work :o	
+	cp ../boot/target/boot.bin files/boot.bin
+
+	cp ../cpmfs/target/disk2.img files/CPMDISK.IMG
 	dd if=/dev/zero of=target/rosco.img  bs=1M count=64
 	mformat -i target/rosco.img -F :: 
 	mcopy -i target/rosco.img files/* ::
-	echo 'cut and paste one of these'
+	echo 'cut and paste this to run'
 	echo 'cd ~/mame && ./mame roscom68k -hard1 ../cpm68k-bootstrap/disk/target/rosco.img -log -oslog -debug'
 	
 clean:

@@ -31,6 +31,7 @@ echo ""
 echo "Formatting a $PARTITIONS partition image -> $IMAGE"
 #dd if=/dev/zero bs=$DISK_SIZE count=1 | tr '\0' '\345' > $IMAGE
 mkfs.cpm -f 4mb-hd $IMAGE
+truncate -s 4M $IMAGE
 #sleep 1
 n=0
 while [ $n -lt $PARTITIONS ]

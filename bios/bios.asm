@@ -1,7 +1,78 @@
 ; Very simple cpm68k bios
 ; Malcolm Harrow August 2023
 
-_ccp     equ $150BC                     ; hard location for _ccp of CPM15000.SR
+_ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
+ramDriveLocation   equ $C0000                           ; memory location for RAM drive
+DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off
+
+; move 128 bytes from A0 to A1 as quickly as possible
+; obviously the downside is that this trashes D0-D7 and A2-A5 :o                                      
+copyData MACRO
+    movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
+    movem.l D0-D7/A2-A5,(A1)
+    adda.w  #48,A1                                      ; 12 * 4
+    movem.l (A0)+,D0-D7/A2-A5                               
+    movem.l D0-D7/A2-A5,(A1)
+    adda.w  #48,A1
+    movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
+    movem.l D0-D7,(A1)
+ENDM    
+
+; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
+debugPrintSector MACRO
+    IFNE DEBUG
+        movem.l D0-D3/A0-A3,-(A7)
+
+        moveq.l #6,D0                                   
+        move.b  #\1,D1                                     
+        trap    #15
+    
+        moveq.l #15,D0
+        move.l  (lastFATSector),D1                          ; sector in hex
+        move.b  #16,D2
+        trap    #15
+
+        moveq.l #6,D0
+        move.b  #'-',D1                                    
+        trap    #15
+
+        moveq.l #15,D0
+        move.l  D3,D1                                       ; offset on sector in hex
+        move.b  #16,D2
+        trap    #15
+
+        moveq.l #6,D0
+        move.b  #' ',D1                                     
+        trap    #15
+
+        movem.l (A7)+,D0-D3/A0-A3
+    ENDIF
+ENDM
+
+; pass in a character to this routine to specify type of operation on the RAM drive eg 'R' or 'W'
+; Assuem A0 is already set up to point to the RAM being moved
+debugPrintRAM MACRO
+    IFNE DEBUG
+        movem.l D0-D3/A0-A3,-(A7)
+
+        exg     A0,A3                                       ; save A0 as trap 15 trashes it
+        moveq.l #6,D0                                   
+        move.b  #\1,D1                                     
+        trap    #15
+        exg     A3,A0
+
+        moveq.l #15,D0
+        move.l  A0,D1                                       ; address in hex
+        move.b  #16,D2
+        trap    #15
+
+        moveq.l #6,D0
+        move.b  #' ',D1                                     
+        trap    #15
+
+        movem.l (A7)+,D0-D3/A0-A3
+    ENDIF
+ENDM
 
 _init::    
     ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
@@ -19,36 +90,36 @@ _init::
     ;   - The root directory is arranged 32 bytes per entry.  We will assume our CPM disk image is in the root and called cpmdisk.img.  So 16 entries in a 512 byte sector
     
     ; check sd card support
-    move.l  #0,D0                                       ; check sd card support
+    moveq.l #0,D0
     trap    #13
     cmp.l   #$1234FEDC,D0                               ; check magic return
-    beq     .noerr1
+    beq     .haveSDsupport
     lea     msgNoSdCardSupport,A0
     jmp     .errExit
     
-.noerr1:
+.haveSDsupport:
     ; init the sd card and get sd card structure back
     lea     sd,A1
-    move.l  #1,D0                                       
+    moveq.l #1,D0                                       
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    beq     .noerr2
+    beq     .haveSDinit
     lea     msgNoSdCardInit,A0
     jmp     .errExit
 
-.noerr2:
+.haveSDinit:
     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
     lea     sd,A1
-    move.l  #2,D0                                       ; read the MBR from the sd card 
-    move.l  #0,D1                                       ; sector number to read
+    moveq.l #2,D0                                       ; read the MBR from the sd card 
+    moveq.l #0,D1                                       ; sector number to read
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .noerr3
+    bne     .haveReadMBR
     lea     msgNoSdCardRead,A0
     jmp     .errExit
 
-.noerr3:
+.haveReadMBR:
     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endianess of 68000
     rol.w   #8,D6
     move.w  D6,startFAT
@@ -59,7 +130,7 @@ _init::
     rol.w   #8,D6
     move.w  D6,rootDirectorySector
     
-    clr.w   D6                                          ; multiply by number of FAT tables
+    moveq.l #0,D6                                       ; multiply by number of FAT tables
     move.b  $10+sdBuf,D6
 
     mulu.w  rootDirectorySector,D6
@@ -86,10 +157,6 @@ _init::
 ;        return failure
 ;      }
 ;
-;      if directory_entry[0] == 0xE5 { // previously erased entry
-;        continue
-;      }
-;
 ;      if directory_entry[0xb] & 0x10 { // subdirectory
 ;        continue
 ;      }
@@ -102,7 +169,6 @@ _init::
 ;        // found file, might have to ignore case here, lets see
 ;        // record sector file starts and file length
 ;        block = entry[20,21] << 16 + entry[26,27]
-;        filelength = entry[28,29,30,31]
 ;        // both of these are store lsb first eg length of 0x7e84 is stored 84 7e 00 00
 ;        return success
 ;      }
@@ -111,102 +177,93 @@ _init::
 
 
     ; search the FAT to try to find the CPM disk image
-    move.l  #0,D3                                       ; sector to read
-    move.l  #0,D4                                       ; directory entry in sector.  Sector is 512b, directory table is 32b so 16 directories per sector
+    moveq.l #0,D3                                       ; sector to read
+    moveq.l #0,D4                                       ; directory entry in sector.  Sector is 512b, directory table is 32b so 16 directories per sector
 
 .startDirectoryEntry:
     move.l  D4,D5
     and.l   #15,D5                                      ; only look at last 4 bits, we want to calculate (directory entry % 16)
-    bne     .noread                                     ; we dont need to read a new sector from the sd card
+    bne     .noReadRequired                             ; we dont need to read a new sector from the sd card
 
     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
     lea     sd,A1
-    move.l  #2,D0                                       ; read sector trap
+    moveq.l #2,D0                                       ; read sector trap
     move.w  rootDirectorySector,D1
     add.w   D3,D1                                       ; sector number to read plus offset to rootDirectorySector
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .noerr4
+    bne     .noReadError
     lea     msgNoSdCardRead,A0
     jmp     .errExit
 
-.noerr4:
+.noReadError:
     addq.l  #1,D3                                       ; increment next sector to read
-    clr.l   D4                                          ; reset directory entry to zero 
+    moveq.l #0,D4                                       ; reset directory entry to zero 
 
-.noread:
+.noReadRequired:
     move.l  D4,D5                                       ; D4 contains directory record
     lsl.l   #5,D5                                       ; multiply offset by 32 to get to start of directory record
     add.l   #sdBuf,D5
-    move.l  D5,A5
+    movea.l D5,A5
     move.b  (A5),D6
     tst.b   D6                                          ; reached end of root directory entries
-    bne     .continue1
+    bne     .notDirEnd
     lea     msgNoCPMImage,A0
     jmp     .errExit
 
-.continue1:
+.notDirEnd:
     move.b  $b(A5),D6
     cmp.b   #$10,D6
     beq     .nextDir                                    ; skip subdirectories entries
     cmp.b   #$f,D6
     beq     .nextDir                                    ; skip long filename entries
 
-    ; an interesting string compare function!  looking for filename CPMDISK.IMG
-    cmp.l   #$43504D44,(A5)+                            ; 'CPMD' = 0x43504D44
+    ; check to see if we have found the CPM Image file
+    ; The name CPMDISK.IMG is stored as "CPMDISK " then "IMG" in FAT32
+    LEA     imageName,A4
+    cmp.l   (A4)+,(A5)+
     bne     .nextDir
-    cmp.l   #$49534B20,(A5)+                            ; 'ISK ' = 0x49534B20
+    cmp.l   (A4)+,(A5)+
     bne     .nextDir
-    move.l  (A5),D6
-    ori.l   #$ff,D6
-    cmp.l   #$494D47FF,D6                               ; 'IMG*' = 0x494D47FF
+    move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
+    clr.b   D6
+    cmp.l   (A4),D6
     bne     .nextDir
-    jmp     .foundCPMImage
-    
-.nextDir:
-    addq.l  #1,D4                                       ; look at next directory entry
-    jmp     .startDirectoryEntry
 
-.foundCPMImage:
-    ; found file, A5 will now be pointing at the third word in the directory entry "IMG*"
-    ; i.e entry[8] so adjust offsets to compensate
+    ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
     ;        block = entry[20,21] << 16 + entry[26,27]
     ; get starting block of CPMDISK.IMG
-    move.w  $c(A5),D6
+    move.w  $c(A5),D6 
     rol.w   #8,D6
     swap    D6
     move.w  $12(A5),D6
     rol.w   #8,D6
-    move.l  D6,blockCPMImage
-    ;        filelength = entry[28,29,30,31]
-    ; get file length of CPMDISK.IMG
-    ; 
-    ; moving the address as move.l causes an exception - alignment issue ?
-    move.w  $16(A5),D6
-    rol.w   #8,D6
-    swap    D6
-    move.w  $14(A5),D6
-    rol.w   #8,D6
-    move.l  D6,filelenCPMImage
 
-    ;   
-    move.l  #TRAPHNDL,$8c               ; set up trap #3 handler
-    clr.l   D0                          ; log on disk A, user 0
+    ; for efficiency we will point blockCPMImage at the actual block on the sd card
+    add.w  (rootDirectorySector),D6
+    subq.l #2,D6                                        ; allows for the fact that the root directory is from sector 2 onwards in FAT32   
+    move.l D6,blockCPMImage
+
+    move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
+    moveq.l #0,D0                                       ; log on disk A, user 0
     rts
 
+.nextDir:
+    addq.l  #1,D4                                       ; look at next directory entry
+    jmp     .startDirectoryEntry
+
 .errExit:
-    move.l  #1,D1                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
-    trap    #14                         ; TRAP to firmware
-    move.l  #1,D0                       ; signal error
+    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
+    trap    #14                          
+    moveq.l #1,D0                                       ; signal error
     rts
 
 TRAPHNDL:
-    cmpi    #23,D0                      ; Function call in range ?
+    cmpi    #23,D0                                      ; Function call in range ?
     bcc     TRAPNG
 
-    add.l   D0,D0                       ; Multiply FC...
-    add.l   D0,D0                       ; ... by 4...
+    lsl.l   #2,D0                                       ; change function call to offset by multiplting by 4
     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
     jsr     (A0)                        ; ... then jump there
 
@@ -240,37 +297,37 @@ BIOSBASE:
 
 
 WBOOT:  
-    jmp   _ccp
+    jmp     _ccp
 
 CONSTAT: 
 ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
-    move.l #7,D0                        ; use EASy68k trap 15 task 7
-    trap   #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
-    clr.l  D0
-    move.b D1,D0
+    moveq.l #7,D0                        ; use EASy68k trap 15 task 7
+    trap    #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
+    moveq.l #0,D0
+    move.b  D1,D0
     rts
          
 CONIN:    
 ; Read single ASCII character from the keyboard into d0
 ; Rosco implementation of this trap waits for input
-    move.l #5,D0                        ; use EASy68k trap 15 task 5
-    trap   #15                          ; d1.b contains the ascii character
-    move.b D1,D0      
-    and.l  #$7f,D0                      ; only use 7 bit character set
+    moveq.l #5,D0                        ; use EASy68k trap 15 task 5
+    trap    #15                          ; d1.b contains the ascii character
+    move.b  D1,D0      
+    and.l   #$7f,D0                      ; only use 7 bit character set
     rts
 
 CONOUT: 
 ; Display single ASCII character in d1
-    move.l #6,D0                        ; use EASy68k trap 15 task 6
-    trap   #15
-    rts                                 ; and exit
+    moveq.l #6,D0                        ; use EASy68k trap 15 task 6
+    trap    #15
+    rts                                  ; and exit
 
 LSTOUT:    
 PUN:
 RDR:
 GETIOB:
 SETIOB:
-    clr.l  D0                            ; HACK ?
+    moveq.l #0,D0
     rts
 
 LISTST:    
@@ -282,32 +339,24 @@ HOME:
     rts
 
 SELDSK:    
-; always assume one drive
+; drive should be in d1.b
+    cmp.b   #1,D1
+    beq     .seldrive1     
     move.b  #0,SELDRV
     move.l  #DPH0,D0
     rts
 
+.seldrive1
+    move.b  #1,SELDRV
+    move.l  #DPH1,D0
+    rts
+
 SETTRK:    
     move.w  D1,TRACK
-
-
-    ;clr.l   D1
-    ;move.w  TRACK,D1
-    ;add.l   #97,D1
-    ;clr.l   D0
-    ;jsr     CONOUT
-
     rts
 
 SETSEC:    
     move.w  D1,SECTOR
-
-    ;clr.l   D1
-    ;move.w  SECTOR,D1
-    ;add.l   #97,D1
-    ;clr.l   D0
-    ;jsr     CONOUT
-
     rts
 
 SECTRAN:
@@ -320,25 +369,48 @@ SETDMA:
     rts
 
 READ:
-; Read one sector from requested disk, track, sector to dma address
-; One small drive possible as loaded at 0x2000 and CPM starts at 0x15000
-; This gives a max ram disk size of ~77k
+; Read one cpm sector from requested disk, track, sector to dma address
+; Can be a cpmimage on the sd card or the ram disk
+    cmp.b   #0,SELDRV
+    bne     .readRAMDrive
 
-    bsr     SETUPRD                      ; translate track/sector values into RAM loc
-RAMDRVR:
-    move.l (A0)+,(A1)+
-    dbra   D2,RAMDRVR
+    bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
+    move.l  DMA,A1
+    copyData
+    moveq.l #0,D0                                       ; return OK status         
+    rts
 
-    clr.l  D0                            ; return OK status         
+.readRAMDrive:
+    bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
+    debugPrintRAM 'R'
+    move.l  DMA,A1
+    copyData
+    moveq.l #0,D0                                       ; return OK status         
     rts         
 
-SETUPRD:
-; replace the ram disk code below with code to read from the 4mb CPM disk image
+setupReadRAM:
+; translate track/sector into RAM location on the RAM drive
+    moveq.l #0,D0
+    move.w  TRACK,D0
+    moveq.l #12,D3                                      ; much faster than shifting by 8 then 4 (40 versus 12 cycles)
+    lsl.l   D3,D0
+
+    moveq.l #0,D2
+    move.w  SECTOR,D2
+    moveq.l #7,D3                                       ; much faster than shifting by 7 (22 versus 12 cycles)
+    lsl.l   D3,D2
+
+    add.l   D2,D0
+    add.l   #ramDriveLocation,D0                        ; add base address of RAM drive
+    movea.l D0,A0                                       ; point to the track/sector in RAM drive
+    rts
+
+setupReadDisk:
 ;
 ; algorithm
 ;
 ; keep 512b in a memory buffer
-; keep requested sector number of the sector currently in the buffer
+; keep sector number of the data currently in the buffer
 ;
 ; if requested sector not in buffer {
 ;     calcuate the sector and offset that the FAT entry for the sector is located in
@@ -351,172 +423,130 @@ SETUPRD:
 
     ; start by calculating the requested (FAT32) sector number from TRACK and SECTOR in D0
     ; also calculate the offset into that 512b buffer for the 128b CPM sector data in D3
-    clr.l  D0
-    move.w TRACK,D0
-    lsl.l  #3,D0
+    moveq.l #0,D1
+    move.w  TRACK,D1
+    lsl.l   #3,D1
 
-    clr.l  D2
-    move.w SECTOR,D2
+    moveq.l #0,D2
+    move.w  SECTOR,D2
 
-    move.l D2,D3
-    and.l  #3,D3                         ; use D3 to calculate the offset of the 128b cpm sector in the 512b FAT sector
-    lsl.l  #7,D3
+    move.l  D2,D3
+    and.l   #3,D3                                       ; use D3 to calculate the offset of the 128b CPM sector in the 512b FAT sector
+    moveq.l #7,D4                                       ; much faster than shifting by 7 (22 versus 12 cycles)
+    lsl.l   D4,D3
 
-    lsr.l  #2,D2
-    add.l  D2,D0                         ; D0 now has the requested sector number
+    lsr.l   #2,D2
+    add.l   D2,D1                                        ; D1 now has the requested sector number
+    add.l   (blockCPMImage),D1                           ; D1 now has the actual sector on the SD card
 
     ; check to see if this FAT32 sector already in memory
-    cmp.l (lastFATSector),D0
-    beq   .nofatRead
+    cmp.l (lastFATSector),D1
+    beq   .noDiskReadRequired
 
-    ; we are going to read the sector (hopefully) so update the last read FAT sector before we lose the contents of D0
-    move.l D0,lastFATSector
+    ; we are going to read the sector (hopefully) so update the last read FAT sector before we lose the contents of D1
+    move.l D1,lastFATSector
 
-
-    ;  as the next part of the bootstrap process, assume that th eFAT table is contiguous for the CP/M image
-    ;  file, this avoids a walk of the FAT table linked list .. but wont deal with any bad sectors on the sd card
-
-    move.l (blockCPMImage),D1
-    add.l  D0,D1
-
-    ;move.l D1,D5                                        ; offset of block number in FAT entry
-    ;and.l  #$FF,D5
-         
-    add.w  (rootDirectorySector),D1                                ; this now has the sector containinbg the FAT entry for the requested sector
-    sub.l  #2,D1 ; HACK !!
-
-    ; calculate the right sector to read using the FAT table
-    ;     startFAT contains the sector where the FAT table starts on the sd card
-    ;     blockCPMImage contains the block within the FAT where the CPM image starts
-    ; the FAT table is a table of sector ids, each 4b long, a sector is 512b so each sector contains 128 entries
-    ; 
-
-    ; first calculate the FAT table sector
-    ; each sector is 512b, each fat entry is 4b, so 128 entries per sector
-    ;move.l (blockCPMImage),D1
-    ;add.l  D0,D1
-
-    ;move.l D1,D5                                        ; offset of block number in FAT entry
-    ;and.l  #$FF,D5
-
-    ;lsr.l  #7,D1             
-    ;add.w  (startFAT),D1                                ; this now has the sector containinbg the FAT entry for the requested sector
-    
-    ; read the FAT sector and get the real sector to read
-    ;lea     sd,A1
-    ;move.l  #2,D0                                       ; read sector trap
-    ;lea     sdBuf,A2
-    ;trap    #13
-    ;cmp.l   #0,D0                                       ; check return
-    ;bne     .noerr5
-    ;lea     msgNoSdCardRead,A0
-    ;move.l  A0,A1                                       ; tidy up return values
-    ;move.b  #$ff,D2
-    ;rts                                                 ; Mmm .. doesn't flag an error, BIOS will continue 
-
-.noerr5:
-    ; read the actual sector pointed to in the FAT table
-    ;lea     sdBuf,A5
-    ;lsl.l   #2,D5                                       ; convert offset to 4b long word addresses
-    ;add.l   D5,A5
-    ;move.l  (A5),D1                                     ; D1 now contains the actual sector to read, but need to switch endian
-    ;rol.w   #8,D1
-    ;swap    D1
-    ;rol.w   #8,D1
-    ;sub.l   #4,D1 ; HACK !!  directory entry starts at block 802, first file starts at block 803 with offset of 3 .. need to understand more
-    ;add.w   (rootDirectorySector),D1                    ; now have actual sector on disk *HACK* should check that this is beyond the bounds of the CP/M image !
+    ; we assume that the FAT table is contiguous for the CP/M image
+    ; file, this avoids a walk of the FAT table linked list .. but wont deal with any bad sectors on the sd card
 
     lea     sd,A1
-    move.l  #2,D0                                       ; read sector trap
+    moveq.l #2,D0                                        ; read sector function code
     lea     sdBuf,A2
     trap    #13
-    cmp.l   #0,D0                                       ; check return
-    bne     .nofatRead
+    cmp.l   #0,D0                                        ; check return
+    bne     .noDiskReadError
+
+    ; if we get here we had a disk read error
+    debugPrintSector 'E'
+    
     lea     msgNoSdCardRead,A0
-    move.l  A0,A1
+    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
+    trap    #14                         
+    moveq.l #1,D0                                       ; signal error
+
+    move.l  #-1,lastFATSector
+
+    lea     sdBuf,A0
+    move.l  DMA,A1
     move.b  #$ff,D2
     rts                                                 ; Mmm .. doesn't flag an error, BIOS will continue 
 
-.nofatRead:
+.noDiskReadError:
+    debugPrintSector 'R'
+    ;jmp    .noCachePrint
+
+.noDiskReadRequired:
+    ;debugPrintSector 'C'
+    
+.noCachePrint:
     lea    sdBuf,A0
     add.l  D3,A0                                        ; add offset into 512b buffer
-    move.l DMA,A1                                       ; get dma
-    move.w #(128/4)-1,D2                                ; long word move 128 bytes of sector data
-    rts
-
-
-
-
-;
-; translate track/sector into RAM location on the RAM drive
-
-    ;clr.l   D1
-    ;move.w  TRACK,D1
-    ;add.l   #65,D1
-    ;clr.l   D0
-    ;jsr     CONOUT
-
-    ;clr.l   D1
-    ;move.w  SECTOR,D1
-    ;add.l   #65,D1
-    ;clr.l   D0
-    ;jsr     CONOUT
-
-
-    clr.l  D0
-    move.w TRACK,D0
-    lsl.l  #8,D0
-    lsl.l  #4,D0
-    clr.l  D2
-    move.w SECTOR,D2
-    lsl.l  #7,D2
-    add.l  D2,D0
-    add.l  #$C0000,D0                    ; add base address of RAM drive
-    move.l D0,A0                         ; point to the track/sector in RAM drive
-    move.l DMA,A1                        ; get dma
-    move.w #(128/4)-1,D2                 ; long word move 128 bytes of sector data
     rts
 
 WRITE:
-; Write one sector to requested disk, track, sector from dma address
-; Both drive A & B are RAM drive
-    ;cmp.b  #2,SELDRV                     ; only drive C can be written
-    ;bne    WRBAD
-    bsr    SETUPRD                       ; translate track/sector values into RAM loc
-RAMDRVW:
-    move.l (A1)+,(A0)+
-    dbra   D2,RAMDRVW
+; Write one cpm sector from requested disk, track, sector to dma address
+; Can be a cpmimage on the sd card or the ram disk
+    cmp.b   #0,SELDRV
+    bne     .writeRAMDrive
 
-    clr.l  D0
-    rts         
-WRBAD:
-    move.l #-1,D0
+    ; going to write to disk
+    bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
+    debugPrintSector 'W'
+    move.l  DMA,A1
+    exg     A0,A1
+    copyData
+
+    ; and write out the 512b buffer to disk
+    move.l  (lastFATSector),D1                          ; set up in SETUPRD
+    lea     sd,A1
+    moveq.l #3,D0                                       ; write sector function call
+    lea     sdBuf,A2
+    trap    #13
+    cmp.l   #0,D0                                       ; check return
+    bne     .noWriteError
+    lea     msgNoSdCardWrite,A0
+    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
+    trap    #14                                         ; TRAP to firmware    
+    moveq.l #1,D0                                       ; signal error
     rts
+    
+.noWriteError:
+    ;move.l #-1,lastFATSector
+    moveq.l #0,D0                                       ; return success
+    rts                    
+
+.writeRAMDrive:
+    bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
+    debugPrintRAM 'W'
+    move.l  DMA,A1
+    exg     A0,A1
+    copyData
+    moveq.l #0,D0
+    rts        
 
 FLUSH:
-    clr.l  D0                            ; return successful
+    moveq.l #0,D0                                       ; return successful
     rts
 
 GETSEG:
-    move.l #MEMRGN,D0                    ; return address of mem region table
+    move.l #MEMRGN,D0                                   ; return address of mem region table
     rts
 
 SETEXC:
-    andi.l  #$ff,D1                      ; do only for exceptions 0 - 255
+    andi.l  #$ff,D1                                     ; do only for exceptions 0 - 255
 
     cmpi    #45,D1
-    beq     NOSET                        ; don't set trap 13,14,15 as used by rosco firmware
+    beq     NOSET                                       ; don't set trap 13,14,15 as used by rosco firmware
     cmpi    #46,D1
     beq     NOSET                        
     cmpi    #47,D1
     beq     NOSET                       
-
-    cmpi    #9,D1                        ; don't set trace trap
+    cmpi    #9,D1                                       ; don't set trace trap
     beq     NOSET
-    lsl     #2,D1                        ; multiply exception nmbr by 4
+    lsl     #2,D1                                       ; multiply exception number by 4
     movea.l D1,A0
-    move.l  (A0),D0                      ; return old vector value
-    move.l  D2,(A0)                      ; insert new vector
+    move.l  (A0),D0                                     ; return old vector value
+    move.l  D2,(A0)                                     ; insert new vector
 
 NOSET:    
     rts
@@ -528,7 +558,6 @@ NOSET:
               align 2                    ; DMA must be at even address
 SELDRV        dc.b        $ff            ; drive requested by seldsk
 RESV          dc.b        0              ; reserve byte, padding
-CURCFSECT     dc.l        -1             ; current CF sector, the 512 bytes data of curtrk is in sectCF
 TRACK         dc.w        0              ; track requested by settrk
 SECTOR        dc.w        0              ; max sector value is 0x3FF
 DMA           dc.l        0
@@ -541,7 +570,7 @@ MEMRGN        dc.w        1              ; 1 memory region
               dc.l        $20000         ; after the CP/M 
 			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
 
-; disk parameter header
+; disk parameter header - 4mb disk on sd card
 DPH0:    
     dc.l      0                          ; no sector translation table
     dc.w      0                          ; dummy
@@ -558,28 +587,47 @@ DPB0:
     dc.b     15                          ; block mask for BLS of 2048
     dc.b     0                           ; extent mask, EXM
     dc.b     0                           ; dummy fill
-    dc.w     2047                        ; DSM, (3 tracks * 1024 sectors * 128 bytes /2048)-1
+    dc.w     2047                        ; DSM, (1024 tracks * 32 sectors * 128 bytes /2048)-1
                            
     dc.w     255                         ; DRM, 256 directory entries
     dc.w     0                           ; directory mask
     dc.w     0                           ; permanent mounted drive, check size is zero
     dc.w     0                           ; no track offset
 
-;diskdef 4mb-hd-0
-;  seclen 128
-;  tracks 1024
-;  sectrk 32
-;  blocksize 2048
-;  maxdir 256
-;  skew 1
-;  boottrk 0
-;  os 2.2
-;end
+
+; disk parameter header - 128k ram disk 
+DPH1:    
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB1                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV1                       ; ptr to allocation vector
+
+DPB1:    
+    dc.w     32                          ; 32 sectors per track
+    dc.b     4                           ; block shift for BLS of 2048
+    dc.b     15                          ; block mask for BLS of 2048
+    dc.b     0                           ; extent mask, EXM
+    dc.b     0                           ; dummy fill
+    dc.w     63                          ; DSM, (32 tracks * 32 sectors * 128 bytes /2048)-1
+                           
+    dc.w     255                         ; DRM, 256 directory entries
+    dc.w     0                           ; directory mask
+    dc.w     0                           ; permanent mounted drive, check size is zero
+    dc.w     0                           ; no track offset
+
+
     align 2
 DIRBUF:    
     ds.b     128                         ; directory buffer
 
 ALV0:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV1:    
 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
 
 sdBuf:    
@@ -597,11 +645,11 @@ startFAT:                                ; sector where FAT table starts on sd c
 blockCPMImage:                           ; block number of CPM image
     dc.l     0
 
-filelenCPMImage:                         ; file length of CPM image
-    dc.l     0
-
 lastFATSector:                           ; last FAT sector read (contents should be in sdBuf)
     dc.l     -1
+
+imageName:
+    dc.b     "CPMDISK IMG",0             ; Nameof CPM image file on SD card
 
 msgNoSdCardSupport:
     dc.b     "error: No SD card support detected",0
@@ -612,11 +660,8 @@ msgNoSdCardInit:
 msgNoSdCardRead:
     dc.b     "error: Unable to read SD card",0
 
+msgNoSdCardWrite:
+    dc.b     "error: Unable to write SD card",0
+
 msgNoCPMImage:
     dc.b     "error: Cannot find CPMDISK.IMG in root directory of SD card",0
-
-strPath:
-    dc.b     "disk1.img",0               ; needs to be a path not a filename (leading /)
-
-strCPMImage:                             ; name of CPM drive image (note space), null terminated
-    dc.b     "CPMDISK IMG",0
