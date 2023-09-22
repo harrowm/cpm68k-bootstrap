@@ -3,7 +3,7 @@
 
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
-DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off
+DEBUG              set 1                                ; set to 1 to print debug messgae, 0 turns off
 
 ; move 128 bytes from A0 to A1 as quickly as possible
 ; obviously the downside is that this trashes D0-D7 and A2-A5 :o                                      
@@ -17,6 +17,20 @@ copyData MACRO
     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
     movem.l D0-D7,(A1)
 ENDM    
+
+; pass in a character to this routine and print it out
+; use to track progress through the code in debug ..
+debugPrintChar MACRO
+    IFNE DEBUG
+        movem.l D0-D3/A0-A3,-(A7)
+
+        moveq.l #6,D0                                   
+        move.b  #\1,D1                                     
+        trap    #15
+    
+        movem.l (A7)+,D0-D3/A0-A3
+    ENDIF
+ENDM
 
 ; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
 debugPrintSector MACRO
@@ -76,8 +90,8 @@ ENDM
 
 _init::    
     ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
-    ; need to find the starting block of the CPM disk image on the sd card, or offset
-    ; to do this we will trawl through the FAT32 boot record etc
+    ; need to find the starting sector of the CPM disk image on the sd card.
+    ; To do this we will trawl through the FAT32 boot record etc
 
     ; to do this:
     ;   - read the MBR, block 0 and note:
@@ -108,7 +122,7 @@ _init::
     jmp     .errExit
 
 .haveSDinit:
-    ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
+    ; read the MBR from sector 0 so we can calculate position of the root diectory and hence the CPM image
     lea     sd,A1
     moveq.l #2,D0                                       ; read the MBR from the sd card 
     moveq.l #0,D1                                       ; sector number to read
@@ -120,25 +134,39 @@ _init::
     jmp     .errExit
 
 .haveReadMBR:
+    ; as we read longs and words off of the MBR we have to take endianess into account and switch the byte order 
+    ; as we are on the 68000 CPU
     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endianess of 68000
     rol.w   #8,D6
-    move.w  D6,startFAT
+    move.w  D6,reservedSectors
 
-    move.l  $24+sdBuf,D6
+    move.l  $2c+sdBuf,D6                                ; read root director cluster (usually 2)
     rol.w   #8,D6
     swap    D6
     rol.w   #8,D6
-    move.w  D6,rootDirectorySector
+    move.l  D6,rootDirectoryCluster
+
+    ; up until the root directory, we use sectors; after the root directory we have to deal with clusters (groups of sectors)
+    ; see the diagram here: https://eric-lo.gitbook.io/lab9-filesystem/overview-of-fat32#
+    ; we need to store the number of sectors per cluster for later use
+    moveq.l #0,D6
+    move.b  $d+sdBuf,D6                                 ; read number of sectors per cluster
+    move.w  D6,sectorsPerCluster                        ; save as a word for later mulu
+
+    ; Calculate the sector of the root directory: 
+    ; = sectors per FAT * number of FATs + number of reserved sectors
+    move.l  $24+sdBuf,D5                                ; read sectors per FAT
+    rol.w   #8,D5
+    swap    D5
+    rol.w   #8,D5
     
-    moveq.l #0,D6                                       ; multiply by number of FAT tables
+    moveq.l #0,D6                                       ; read number of FAT tables
     move.b  $10+sdBuf,D6
 
-    mulu.w  rootDirectorySector,D6
-    add.w   startFAT,D6
+    mulu.w  D5,D6
+    add.w   reservedSectors,D6
     move.w  D6,rootDirectorySector
 
-
-;    - logical sectors per FAT, 0x24, long  (eg f1 03 00 00)
 
 ;    sector = sector of start of root directory
 ;    entry = 0
@@ -189,7 +217,7 @@ _init::
     lea     sd,A1
     moveq.l #2,D0                                       ; read sector trap
     move.w  rootDirectorySector,D1
-    add.w   D3,D1                                       ; sector number to read plus offset to rootDirectorySector
+    add.w   D3,D1                                       ; sector number to read plus offset to rootDirectoryCluster
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
@@ -224,26 +252,31 @@ _init::
     LEA     imageName,A4
     cmp.l   (A4)+,(A5)+
     bne     .nextDir
+    debugPrintChar '1'
     cmp.l   (A4)+,(A5)+
     bne     .nextDir
+    debugPrintChar '2'
     move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
     clr.b   D6
     cmp.l   (A4),D6
     bne     .nextDir
+    debugPrintChar '3'
 
     ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
     ;        block = entry[20,21] << 16 + entry[26,27]
     ; get starting block of CPMDISK.IMG
-    move.w  $c(A5),D6 
+    move.w  $c(A5),D6                                   
     rol.w   #8,D6
     swap    D6
     move.w  $12(A5),D6
     rol.w   #8,D6
 
-    ; for efficiency we will point blockCPMImage at the actual block on the sd card
+    sub.l   (rootDirectoryCluster),D6                   ; allow for the position of the root directory (usually 2)
+    mulu.w  (sectorsPerCluster),D6  
+
+    ; for efficiency we will point CPMImageSector at the actual block on the sd card
     add.w  (rootDirectorySector),D6
-    subq.l #2,D6                                        ; allows for the fact that the root directory is from sector 2 onwards in FAT32   
-    move.l D6,blockCPMImage
+    move.l D6,CPMImageSector
 
     move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
     moveq.l #0,D0                                       ; log on disk A, user 0
@@ -437,7 +470,7 @@ setupReadDisk:
 
     lsr.l   #2,D2
     add.l   D2,D1                                        ; D1 now has the requested sector number
-    add.l   (blockCPMImage),D1                           ; D1 now has the actual sector on the SD card
+    add.l   (CPMImageSector),D1                          ; D1 now has the actual sector on the SD card
 
     ; check to see if this FAT32 sector already in memory
     cmp.l (lastFATSector),D1
@@ -636,13 +669,19 @@ sdBuf:
 sd:
     ds.b     64                          ; needs to be large enough to hold a sd card structure
 
+rootDirectoryCluster:                    ; cluster of root directory - usually 2
+    dc.w     0
+
 rootDirectorySector:                     ; sector where root directory starts on sd card
     dc.w     0
 
-startFAT:                                ; sector where FAT table starts on sd card
+reservedSectors:                        ; sector where FAT table starts on sd card
     dc.w     0
 
-blockCPMImage:                           ; block number of CPM image
+sectorsPerCluster:                       ; sectors per cluster in word format
+    dc.w     0
+
+CPMImageSector:                          ; sector number of CPM image
     dc.l     0
 
 lastFATSector:                           ; last FAT sector read (contents should be in sdBuf)
