@@ -122,20 +122,44 @@ _init::
     jmp     .errExit
 
 .haveSDinit:
-    ; read the MBR from sector 0 so we can calculate position of the root diectory and hence the CPM image
+    ; read the MBR from sector 0 on the disk so we can read the partition table
     lea     sd,A1
     moveq.l #2,D0                                       ; read the MBR from the sd card 
     moveq.l #0,D1                                       ; sector number to read
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .haveReadMBR
+    bne     .haveReadDiskMBR
     lea     msgNoSdCardRead,A0
     jmp     .errExit
 
-.haveReadMBR:
+.haveReadDiskMBR:
+    ; now we need to check the disk MBR for a partition table and get the offset to the first partition
+    ; this is a bodge .. CPM has to be on the first partition, partiton 0 and 0x1BE on the disk MBR
+    ; The code should really check all 4 partitions ..
+
     ; as we read longs and words off of the MBR we have to take endianess into account and switch the byte order 
     ; as we are on the 68000 CPU
+    move.l  #$1c6(A2),D6
+    move.l  $1c6+sdBuf,D6                               ; read LBA start from partition 0
+    rol.w   #8,D6
+    swap    D6
+    rol.w   #8,D6
+    move.l  D6,partStartSector
+
+    ; read the MBR from sector 0 of the partition so we can calculate position of the root diectory and hence the CPM image
+    lea     sd,A1
+    moveq.l #2,D0                                       ; read the MBR from the sd card 
+    move.l  D6,D1                                       ; sector number to read - partStartSector
+    lea     sdBuf,A2
+    trap    #13
+    cmp.l   #0,D0                                       ; check return
+    bne     .haveReadPartMBR
+    lea     msgNoSdCardRead,A0
+    jmp     .errExit
+
+.haveReadPartMBR
+
     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endianess of 68000
     rol.w   #8,D6
     move.w  D6,reservedSectors
@@ -155,6 +179,7 @@ _init::
 
     ; Calculate the sector of the root directory: 
     ; = sectors per FAT * number of FATs + number of reserved sectors
+    ; += partStartSector to allow for the start of the partition on the disk
     move.l  $24+sdBuf,D5                                ; read sectors per FAT
     rol.w   #8,D5
     swap    D5
@@ -165,6 +190,7 @@ _init::
 
     mulu.w  D5,D6
     add.w   reservedSectors,D6
+    add.l   partStartSector,D6                          ; partStartSector is a long
     move.w  D6,rootDirectorySector
 
 
@@ -669,13 +695,16 @@ sdBuf:
 sd:
     ds.b     64                          ; needs to be large enough to hold a sd card structure
 
+partStartSector:                         ; starting sector for partition 0 on the disk
+    dc.l     0
+
 rootDirectoryCluster:                    ; cluster of root directory - usually 2
-    dc.w     0
+    dc.l     0
 
 rootDirectorySector:                     ; sector where root directory starts on sd card
     dc.w     0
 
-reservedSectors:                        ; sector where FAT table starts on sd card
+reservedSectors:                         ; sector where FAT table starts on sd card
     dc.w     0
 
 sectorsPerCluster:                       ; sectors per cluster in word format
@@ -703,4 +732,4 @@ msgNoSdCardWrite:
     dc.b     "error: Unable to write SD card",0
 
 msgNoCPMImage:
-    dc.b     "error: Cannot find CPMDISK.IMG in root directory of SD card",0
+    dc.b     "error: Cannot find CPMDISK.IMG in root directory of partition 0 on SD card",0
