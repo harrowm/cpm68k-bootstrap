@@ -37,6 +37,9 @@ $(DIR_TARGET)/disk1.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 $(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice.txt
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice120.txt
+#	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 sherlock.txt # large testing file
 	
 
 #$(DIR_TARGET)/disk10.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)

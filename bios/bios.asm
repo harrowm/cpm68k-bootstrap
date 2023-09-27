@@ -3,20 +3,7 @@
 
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
-DEBUG              set 1                                ; set to 1 to print debug messgae, 0 turns off
-
-; move 128 bytes from A0 to A1 as quickly as possible
-; obviously the downside is that this trashes D0-D7 and A2-A5 :o                                      
-copyData MACRO
-    movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-    movem.l D0-D7/A2-A5,(A1)
-    adda.w  #48,A1                                      ; 12 * 4
-    movem.l (A0)+,D0-D7/A2-A5                               
-    movem.l D0-D7/A2-A5,(A1)
-    adda.w  #48,A1
-    movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-    movem.l D0-D7,(A1)
-ENDM    
+DEBUG              set 1                                ; set to 1 to print debug messgae, 0 turns off  
 
 ; pass in a character to this routine and print it out
 ; use to track progress through the code in debug ..
@@ -32,6 +19,7 @@ debugPrintChar MACRO
     ENDIF
 ENDM
 
+; print sector information read from / written to a SD disk image (or real SD card)
 ; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
 debugPrintSector MACRO
     IFNE DEBUG
@@ -56,6 +44,15 @@ debugPrintSector MACRO
         trap    #15
 
         moveq.l #6,D0
+        move.b  #'-',D1                                     
+        trap    #15
+
+        moveq.l #15,D0
+        move.l  (DMA),D1                          ; sector in hex
+        move.b  #16,D2
+        trap    #15
+
+        moveq.l #6,D0
         move.b  #' ',D1                                     
         trap    #15
 
@@ -63,6 +60,7 @@ debugPrintSector MACRO
     ENDIF
 ENDM
 
+; print sector information read from / written to a RAM disk
 ; pass in a character to this routine to specify type of operation on the RAM drive eg 'R' or 'W'
 ; Assuem A0 is already set up to point to the RAM being moved
 debugPrintRAM MACRO
@@ -77,6 +75,15 @@ debugPrintRAM MACRO
 
         moveq.l #15,D0
         move.l  A0,D1                                       ; address in hex
+        move.b  #16,D2
+        trap    #15
+
+        moveq.l #6,D0
+        move.b  #'-',D1                                     
+        trap    #15
+
+        moveq.l #15,D0
+        move.l  (DMA),D1                          ; sector in hex
         move.b  #16,D2
         trap    #15
 
@@ -140,7 +147,6 @@ _init::
 
     ; as we read longs and words off of the MBR we have to take endianess into account and switch the byte order 
     ; as we are on the 68000 CPU
-    move.l  #$1c6(A2),D6
     move.l  $1c6+sdBuf,D6                               ; read LBA start from partition 0
     rol.w   #8,D6
     swap    D6
@@ -347,7 +353,7 @@ BIOSBASE:
     dc.l    WRITE
     dc.l    LISTST
     dc.l    SECTRAN
-    dc.l    SETDMA
+    dc.l    SETDMA2
     dc.l    GETSEG
     dc.l    GETIOB
     dc.l    SETIOB
@@ -427,6 +433,10 @@ SETDMA:
     move.l  D1,DMA
     rts
 
+SETDMA2:
+    debugPrintChar '*'
+    rts
+
 READ:
 ; Read one cpm sector from requested disk, track, sector to dma address
 ; Can be a cpmimage on the sd card or the ram disk
@@ -435,7 +445,12 @@ READ:
 
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
     move.l  DMA,A1
-    copyData
+    move.l  #(128/4-1),d0  
+
+.MOVE_LOOP1:
+    MOVE.L  (A0)+,(A1)+                                 ; copy long word from source to dest
+    dbra    D0,.MOVE_LOOP1
+    
     moveq.l #0,D0                                       ; return OK status         
     rts
 
@@ -443,7 +458,12 @@ READ:
     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
     debugPrintRAM 'R'
     move.l  DMA,A1
-    copyData
+    move.l  #(128/4-1),d0  
+
+.MOVE_LOOP2:
+    MOVE.L  (A0)+,(A1)+                                 ; copy long word from source to dest
+    dbra    D0,.MOVE_LOOP2
+
     moveq.l #0,D0                                       ; return OK status         
     rts         
 
@@ -524,11 +544,9 @@ setupReadDisk:
     moveq.l #1,D0                                       ; signal error
 
     move.l  #-1,lastFATSector
-
-    lea     sdBuf,A0
-    move.l  DMA,A1
-    move.b  #$ff,D2
-    rts                                                 ; Mmm .. doesn't flag an error, BIOS will continue 
+    move.l  #$ff,D2
+    chk     #1,D2                                       ; cause a trap to stop execution
+    rts                                                 ; should not get here .. 
 
 .noDiskReadError:
     debugPrintSector 'R'
@@ -548,18 +566,21 @@ WRITE:
     cmp.b   #0,SELDRV
     bne     .writeRAMDrive
 
-    ; going to write to disk
+    ; going to write to disk    
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
     debugPrintSector 'W'
     move.l  DMA,A1
-    exg     A0,A1
-    copyData
+    move.l  #(128/4-1),d0  
+    
+.MOVE_LOOP3:
+    MOVE.L  (A1)+,(A0)+                                 ; copy long word from source to dest, reverse direction from read
+    dbra    D0,.MOVE_LOOP3
 
     ; and write out the 512b buffer to disk
     move.l  (lastFATSector),D1                          ; set up in SETUPRD
     lea     sd,A1
     moveq.l #3,D0                                       ; write sector function call
-    lea     sdBuf,A2
+    lea     sdBuf,A2                                    ; write out sdBuf to disk
     trap    #13
     cmp.l   #0,D0                                       ; check return
     bne     .noWriteError
@@ -578,8 +599,12 @@ WRITE:
     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
     debugPrintRAM 'W'
     move.l  DMA,A1
-    exg     A0,A1
-    copyData
+    move.l  #(128/4-1),d0  
+
+.MOVE_LOOP4:
+    MOVE.L  (A1)+,(A0)+                                 ; copy long word from source to dest, reverse direction from read
+    dbra    D0,.MOVE_LOOP4
+
     moveq.l #0,D0
     rts        
 

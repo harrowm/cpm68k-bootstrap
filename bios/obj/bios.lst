@@ -1,5 +1,5 @@
 Sections:
-00: "CODE" (0-9F9)
+00: "CODE" (0-98D)
 
 
 Source: "bios.asm"
@@ -8,282 +8,288 @@ Source: "bios.asm"
                             	     3: 
                             	     4: _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
                             	     5: ramDriveLocation   equ $C0000                           ; memory location for RAM drive
-                            	     6: DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off
+                            	     6: DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off  
                             	     7: 
-                            	     8: ; move 128 bytes from A0 to A1 as quickly as possible
-                            	     9: ; obviously the downside is that this trashes D0-D7 and A2-A5 :o                                      
-                            	    10: copyData MACRO
-                            	    11:     movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-                            	    12:     movem.l D0-D7/A2-A5,(A1)
-                            	    13:     adda.w  #48,A1                                      ; 12 * 4
-                            	    14:     movem.l (A0)+,D0-D7/A2-A5                               
-                            	    15:     movem.l D0-D7/A2-A5,(A1)
-                            	    16:     adda.w  #48,A1
-                            	    17:     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-                            	    18:     movem.l D0-D7,(A1)
-                            	    19: ENDM    
-                            	    20: 
-                            	    21: ; pass in a character to this routine and print it out
-                            	    22: ; use to track progress through the code in debug ..
-                            	    23: debugPrintChar MACRO
-                            	    24:     IFNE DEBUG
-                            	    25:         movem.l D0-D3/A0-A3,-(A7)
-                            	    26: 
-                            	    27:         moveq.l #6,D0                                   
-                            	    28:         move.b  #\1,D1                                     
-                            	    29:         trap    #15
-                            	    30:     
-                            	    31:         movem.l (A7)+,D0-D3/A0-A3
-                            	    32:     ENDIF
-                            	    33: ENDM
-                            	    34: 
-                            	    35: ; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
-                            	    36: debugPrintSector MACRO
-                            	    37:     IFNE DEBUG
-                            	    38:         movem.l D0-D3/A0-A3,-(A7)
-                            	    39: 
-                            	    40:         moveq.l #6,D0                                   
-                            	    41:         move.b  #\1,D1                                     
-                            	    42:         trap    #15
-                            	    43:     
-                            	    44:         moveq.l #15,D0
-                            	    45:         move.l  (lastFATSector),D1                          ; sector in hex
-                            	    46:         move.b  #16,D2
-                            	    47:         trap    #15
-                            	    48: 
-                            	    49:         moveq.l #6,D0
-                            	    50:         move.b  #'-',D1                                    
-                            	    51:         trap    #15
-                            	    52: 
-                            	    53:         moveq.l #15,D0
-                            	    54:         move.l  D3,D1                                       ; offset on sector in hex
-                            	    55:         move.b  #16,D2
-                            	    56:         trap    #15
-                            	    57: 
-                            	    58:         moveq.l #6,D0
-                            	    59:         move.b  #' ',D1                                     
-                            	    60:         trap    #15
-                            	    61: 
-                            	    62:         movem.l (A7)+,D0-D3/A0-A3
-                            	    63:     ENDIF
-                            	    64: ENDM
-                            	    65: 
-                            	    66: ; pass in a character to this routine to specify type of operation on the RAM drive eg 'R' or 'W'
-                            	    67: ; Assuem A0 is already set up to point to the RAM being moved
-                            	    68: debugPrintRAM MACRO
-                            	    69:     IFNE DEBUG
-                            	    70:         movem.l D0-D3/A0-A3,-(A7)
-                            	    71: 
-                            	    72:         exg     A0,A3                                       ; save A0 as trap 15 trashes it
-                            	    73:         moveq.l #6,D0                                   
-                            	    74:         move.b  #\1,D1                                     
-                            	    75:         trap    #15
-                            	    76:         exg     A3,A0
-                            	    77: 
-                            	    78:         moveq.l #15,D0
-                            	    79:         move.l  A0,D1                                       ; address in hex
-                            	    80:         move.b  #16,D2
-                            	    81:         trap    #15
-                            	    82: 
-                            	    83:         moveq.l #6,D0
-                            	    84:         move.b  #' ',D1                                     
-                            	    85:         trap    #15
-                            	    86: 
-                            	    87:         movem.l (A7)+,D0-D3/A0-A3
-                            	    88:     ENDIF
-                            	    89: ENDM
-                            	    90: 
-                            	    91: _init::    
-                            	    92:     ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
-                            	    93:     ; need to find the starting sector of the CPM disk image on the sd card.
-                            	    94:     ; To do this we will trawl through the FAT32 boot record etc
-                            	    95: 
-                            	    96:     ; to do this:
-                            	    97:     ;   - read the MBR, block 0 and note:
-                            	    98:     ;     - number of reserved sectors, 0x0E, word (eg 20 00)
-                            	    99:     ;     - logical sectors per FAT, 0x24, long  (eg f1 03 00 00)
-                            	   100:     ;     - number of fats, 0x10, byte (eg 02)
-                            	   101:     ;   - This enables us to calculate:
-                            	   102:     ;     - start of FAT table (sector after number of reserved sectors - 32 or 0x4000
-                            	   103:     ;     - start of root directory,  Logical sectors per FAT (0x24) * Number of FATs (0x10) + Reserved logical sectors
-                            	   104:     ;   - The root directory is arranged 32 bytes per entry.  We will assume our CPM disk image is in the root and call
-                            	   105:     
-                            	   106:     ; check sd card support
-00:00000000 7000            	   107:     moveq.l #0,D0
-00:00000002 4E4D            	   108:     trap    #13
-00:00000004 B0BC1234FEDC    	   109:     cmp.l   #$1234FEDC,D0                               ; check magic return
-00:0000000A 6708            	   110:     beq     .haveSDsupport
-00:0000000C 41FA091C        	   111:     lea     msgNoSdCardSupport,A0
-00:00000010 60000144        	   112:     jmp     .errExit
-                            	   113:     
-                            	   114: .haveSDsupport:
-                            	   115:     ; init the sd card and get sd card structure back
-00:00000014 43FA08B2        	   116:     lea     sd,A1
-00:00000018 7001            	   117:     moveq.l #1,D0                                       
-00:0000001A 4E4D            	   118:     trap    #13
-00:0000001C 4A80            	   119:     cmp.l   #0,D0                                       ; check return
-00:0000001E 6708            	   120:     beq     .haveSDinit
-00:00000020 41FA092B        	   121:     lea     msgNoSdCardInit,A0
-00:00000024 60000130        	   122:     jmp     .errExit
-                            	   123: 
-                            	   124: .haveSDinit:
-                            	   125:     ; read the MBR from sector 0 on the disk so we can read the partition table
-00:00000028 43FA089E        	   126:     lea     sd,A1
-00:0000002C 7002            	   127:     moveq.l #2,D0                                       ; read the MBR from the sd card 
-00:0000002E 7200            	   128:     moveq.l #0,D1                                       ; sector number to read
-00:00000030 45FA0696        	   129:     lea     sdBuf,A2
-00:00000034 4E4D            	   130:     trap    #13
-00:00000036 4A80            	   131:     cmp.l   #0,D0                                       ; check return
-00:00000038 6608            	   132:     bne     .haveReadDiskMBR
-00:0000003A 41FA0935        	   133:     lea     msgNoSdCardRead,A0
-00:0000003E 60000116        	   134:     jmp     .errExit
-                            	   135: 
-                            	   136: .haveReadDiskMBR:
-                            	   137:     ; now we need to check the disk MBR for a partition table and get the offset to the first partition
-                            	   138:     ; this is a bodge .. CPM has to be on the first partition, partiton 0 and 0x1BE on the disk MBR
-                            	   139:     ; The code should really check all 4 partitions ..
-                            	   140: 
-                            	   141:     ; as we read longs and words off of the MBR we have to take endianess into account and switch the byte order 
-                            	   142:     ; as we are on the 68000 CPU
-00:00000042 2C3C000001C6    	   143:     move.l  #$1c6(A2),D6
-00:00000048 2C3A0844        	   144:     move.l  $1c6+sdBuf,D6                               ; read LBA start from partition 0
-00:0000004C E15E            	   145:     rol.w   #8,D6
-00:0000004E 4846            	   146:     swap    D6
-00:00000050 E15E            	   147:     rol.w   #8,D6
-00:00000052 23C600000908    	   148:     move.l  D6,partStartSector
-                            	   149: 
-                            	   150:     ; read the MBR from sector 0 of the partition so we can calculate position of the root diectory and hence the CPM i
-00:00000058 43FA086E        	   151:     lea     sd,A1
-00:0000005C 7002            	   152:     moveq.l #2,D0                                       ; read the MBR from the sd card 
-00:0000005E 2206            	   153:     move.l  D6,D1                                       ; sector number to read - partStartSector
-00:00000060 45FA0666        	   154:     lea     sdBuf,A2
-00:00000064 4E4D            	   155:     trap    #13
-00:00000066 4A80            	   156:     cmp.l   #0,D0                                       ; check return
-00:00000068 6608            	   157:     bne     .haveReadPartMBR
-00:0000006A 41FA0905        	   158:     lea     msgNoSdCardRead,A0
-00:0000006E 600000E6        	   159:     jmp     .errExit
-                            	   160: 
-                            	   161: .haveReadPartMBR
-                            	   162: 
-00:00000072 3C3A0662        	   163:     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endiane
-00:00000076 E15E            	   164:     rol.w   #8,D6
-00:00000078 33C600000912    	   165:     move.w  D6,reservedSectors
+                            	     8: ; pass in a character to this routine and print it out
+                            	     9: ; use to track progress through the code in debug ..
+                            	    10: debugPrintChar MACRO
+                            	    11:     IFNE DEBUG
+                            	    12:         movem.l D0-D3/A0-A3,-(A7)
+                            	    13: 
+                            	    14:         moveq.l #6,D0                                   
+                            	    15:         move.b  #\1,D1                                     
+                            	    16:         trap    #15
+                            	    17:     
+                            	    18:         movem.l (A7)+,D0-D3/A0-A3
+                            	    19:     ENDIF
+                            	    20: ENDM
+                            	    21: 
+                            	    22: ; print sector information read from / written to a SD disk image (or real SD card)
+                            	    23: ; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
+                            	    24: debugPrintSector MACRO
+                            	    25:     IFNE DEBUG
+                            	    26:         movem.l D0-D3/A0-A3,-(A7)
+                            	    27: 
+                            	    28:         moveq.l #6,D0                                   
+                            	    29:         move.b  #\1,D1                                     
+                            	    30:         trap    #15
+                            	    31:     
+                            	    32:         moveq.l #15,D0
+                            	    33:         move.l  (lastFATSector),D1                          ; sector in hex
+                            	    34:         move.b  #16,D2
+                            	    35:         trap    #15
+                            	    36: 
+                            	    37:         moveq.l #6,D0
+                            	    38:         move.b  #'-',D1                                    
+                            	    39:         trap    #15
+                            	    40: 
+                            	    41:         moveq.l #15,D0
+                            	    42:         move.l  D3,D1                                       ; offset on sector in hex
+                            	    43:         move.b  #16,D2
+                            	    44:         trap    #15
+                            	    45: 
+                            	    46:         moveq.l #6,D0
+                            	    47:         move.b  #'-',D1                                     
+                            	    48:         trap    #15
+                            	    49: 
+                            	    50:         moveq.l #15,D0
+                            	    51:         move.l  (DMA),D1                          ; sector in hex
+                            	    52:         move.b  #16,D2
+                            	    53:         trap    #15
+                            	    54: 
+                            	    55:         moveq.l #6,D0
+                            	    56:         move.b  #' ',D1                                     
+                            	    57:         trap    #15
+                            	    58: 
+                            	    59:         movem.l (A7)+,D0-D3/A0-A3
+                            	    60:     ENDIF
+                            	    61: ENDM
+                            	    62: 
+                            	    63: ; print sector information read from / written to a RAM disk
+                            	    64: ; pass in a character to this routine to specify type of operation on the RAM drive eg 'R' or 'W'
+                            	    65: ; Assuem A0 is already set up to point to the RAM being moved
+                            	    66: debugPrintRAM MACRO
+                            	    67:     IFNE DEBUG
+                            	    68:         movem.l D0-D3/A0-A3,-(A7)
+                            	    69: 
+                            	    70:         exg     A0,A3                                       ; save A0 as trap 15 trashes it
+                            	    71:         moveq.l #6,D0                                   
+                            	    72:         move.b  #\1,D1                                     
+                            	    73:         trap    #15
+                            	    74:         exg     A3,A0
+                            	    75: 
+                            	    76:         moveq.l #15,D0
+                            	    77:         move.l  A0,D1                                       ; address in hex
+                            	    78:         move.b  #16,D2
+                            	    79:         trap    #15
+                            	    80: 
+                            	    81:         moveq.l #6,D0
+                            	    82:         move.b  #'-',D1                                     
+                            	    83:         trap    #15
+                            	    84: 
+                            	    85:         moveq.l #15,D0
+                            	    86:         move.l  (DMA),D1                          ; sector in hex
+                            	    87:         move.b  #16,D2
+                            	    88:         trap    #15
+                            	    89: 
+                            	    90:         moveq.l #6,D0
+                            	    91:         move.b  #' ',D1                                     
+                            	    92:         trap    #15
+                            	    93: 
+                            	    94:         movem.l (A7)+,D0-D3/A0-A3
+                            	    95:     ENDIF
+                            	    96: ENDM
+                            	    97: 
+                            	    98: _init::    
+                            	    99:     ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
+                            	   100:     ; need to find the starting sector of the CPM disk image on the sd card.
+                            	   101:     ; To do this we will trawl through the FAT32 boot record etc
+                            	   102: 
+                            	   103:     ; to do this:
+                            	   104:     ;   - read the MBR, block 0 and note:
+                            	   105:     ;     - number of reserved sectors, 0x0E, word (eg 20 00)
+                            	   106:     ;     - logical sectors per FAT, 0x24, long  (eg f1 03 00 00)
+                            	   107:     ;     - number of fats, 0x10, byte (eg 02)
+                            	   108:     ;   - This enables us to calculate:
+                            	   109:     ;     - start of FAT table (sector after number of reserved sectors - 32 or 0x4000
+                            	   110:     ;     - start of root directory,  Logical sectors per FAT (0x24) * Number of FATs (0x10) + Reserved logical sectors
+                            	   111:     ;   - The root directory is arranged 32 bytes per entry.  We will assume our CPM disk image is in the root and call
+                            	   112:     
+                            	   113:     ; check sd card support
+00:00000000 7000            	   114:     moveq.l #0,D0
+00:00000002 4E4D            	   115:     trap    #13
+00:00000004 B0BC1234FEDC    	   116:     cmp.l   #$1234FEDC,D0                               ; check magic return
+00:0000000A 6708            	   117:     beq     .haveSDsupport
+00:0000000C 41FA08B0        	   118:     lea     msgNoSdCardSupport,A0
+00:00000010 6000013E        	   119:     jmp     .errExit
+                            	   120:     
+                            	   121: .haveSDsupport:
+                            	   122:     ; init the sd card and get sd card structure back
+00:00000014 43FA0846        	   123:     lea     sd,A1
+00:00000018 7001            	   124:     moveq.l #1,D0                                       
+00:0000001A 4E4D            	   125:     trap    #13
+00:0000001C 4A80            	   126:     cmp.l   #0,D0                                       ; check return
+00:0000001E 6708            	   127:     beq     .haveSDinit
+00:00000020 41FA08BF        	   128:     lea     msgNoSdCardInit,A0
+00:00000024 6000012A        	   129:     jmp     .errExit
+                            	   130: 
+                            	   131: .haveSDinit:
+                            	   132:     ; read the MBR from sector 0 on the disk so we can read the partition table
+00:00000028 43FA0832        	   133:     lea     sd,A1
+00:0000002C 7002            	   134:     moveq.l #2,D0                                       ; read the MBR from the sd card 
+00:0000002E 7200            	   135:     moveq.l #0,D1                                       ; sector number to read
+00:00000030 45FA062A        	   136:     lea     sdBuf,A2
+00:00000034 4E4D            	   137:     trap    #13
+00:00000036 4A80            	   138:     cmp.l   #0,D0                                       ; check return
+00:00000038 6608            	   139:     bne     .haveReadDiskMBR
+00:0000003A 41FA08C9        	   140:     lea     msgNoSdCardRead,A0
+00:0000003E 60000110        	   141:     jmp     .errExit
+                            	   142: 
+                            	   143: .haveReadDiskMBR:
+                            	   144:     ; now we need to check the disk MBR for a partition table and get the offset to the first partition
+                            	   145:     ; this is a bodge .. CPM has to be on the first partition, partiton 0 and 0x1BE on the disk MBR
+                            	   146:     ; The code should really check all 4 partitions ..
+                            	   147: 
+                            	   148:     ; as we read longs and words off of the MBR we have to take endianess into account and switch the byte order 
+                            	   149:     ; as we are on the 68000 CPU
+00:00000042 2C3A07DE        	   150:     move.l  $1c6+sdBuf,D6                               ; read LBA start from partition 0
+00:00000046 E15E            	   151:     rol.w   #8,D6
+00:00000048 4846            	   152:     swap    D6
+00:0000004A E15E            	   153:     rol.w   #8,D6
+00:0000004C 23C60000089C    	   154:     move.l  D6,partStartSector
+                            	   155: 
+                            	   156:     ; read the MBR from sector 0 of the partition so we can calculate position of the root diectory and hence the CPM i
+00:00000052 43FA0808        	   157:     lea     sd,A1
+00:00000056 7002            	   158:     moveq.l #2,D0                                       ; read the MBR from the sd card 
+00:00000058 2206            	   159:     move.l  D6,D1                                       ; sector number to read - partStartSector
+00:0000005A 45FA0600        	   160:     lea     sdBuf,A2
+00:0000005E 4E4D            	   161:     trap    #13
+00:00000060 4A80            	   162:     cmp.l   #0,D0                                       ; check return
+00:00000062 6608            	   163:     bne     .haveReadPartMBR
+00:00000064 41FA089F        	   164:     lea     msgNoSdCardRead,A0
+00:00000068 600000E6        	   165:     jmp     .errExit
                             	   166: 
-00:0000007E 2C3A0674        	   167:     move.l  $2c+sdBuf,D6                                ; read root director cluster (usually 2)
-00:00000082 E15E            	   168:     rol.w   #8,D6
-00:00000084 4846            	   169:     swap    D6
-00:00000086 E15E            	   170:     rol.w   #8,D6
-00:00000088 23C60000090C    	   171:     move.l  D6,rootDirectoryCluster
+                            	   167: .haveReadPartMBR
+                            	   168: 
+00:0000006C 3C3A05FC        	   169:     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endiane
+00:00000070 E15E            	   170:     rol.w   #8,D6
+00:00000072 33C6000008A6    	   171:     move.w  D6,reservedSectors
                             	   172: 
-                            	   173:     ; up until the root directory, we use sectors; after the root directory we have to deal with clusters (groups of se
-                            	   174:     ; see the diagram here: https://eric-lo.gitbook.io/lab9-filesystem/overview-of-fat32#
-                            	   175:     ; we need to store the number of sectors per cluster for later use
-00:0000008E 7C00            	   176:     moveq.l #0,D6
-00:00000090 1C3A0643        	   177:     move.b  $d+sdBuf,D6                                 ; read number of sectors per cluster
-00:00000094 33C600000914    	   178:     move.w  D6,sectorsPerCluster                        ; save as a word for later mulu
-                            	   179: 
-                            	   180:     ; Calculate the sector of the root directory: 
-                            	   181:     ; = sectors per FAT * number of FATs + number of reserved sectors
-                            	   182:     ; += partStartSector to allow for the start of the partition on the disk
-00:0000009A 2A3A0650        	   183:     move.l  $24+sdBuf,D5                                ; read sectors per FAT
-00:0000009E E15D            	   184:     rol.w   #8,D5
-00:000000A0 4845            	   185:     swap    D5
-00:000000A2 E15D            	   186:     rol.w   #8,D5
-                            	   187:     
-00:000000A4 7C00            	   188:     moveq.l #0,D6                                       ; read number of FAT tables
-00:000000A6 1C3A0630        	   189:     move.b  $10+sdBuf,D6
-                            	   190: 
-00:000000AA CCC5            	   191:     mulu.w  D5,D6
-00:000000AC DC7A0864        	   192:     add.w   reservedSectors,D6
-00:000000B0 DCBA0856        	   193:     add.l   partStartSector,D6                          ; partStartSector is a long
-00:000000B4 33C600000910    	   194:     move.w  D6,rootDirectorySector
-                            	   195: 
+00:00000078 2C3A060E        	   173:     move.l  $2c+sdBuf,D6                                ; read root director cluster (usually 2)
+00:0000007C E15E            	   174:     rol.w   #8,D6
+00:0000007E 4846            	   175:     swap    D6
+00:00000080 E15E            	   176:     rol.w   #8,D6
+00:00000082 23C6000008A0    	   177:     move.l  D6,rootDirectoryCluster
+                            	   178: 
+                            	   179:     ; up until the root directory, we use sectors; after the root directory we have to deal with clusters (groups of se
+                            	   180:     ; see the diagram here: https://eric-lo.gitbook.io/lab9-filesystem/overview-of-fat32#
+                            	   181:     ; we need to store the number of sectors per cluster for later use
+00:00000088 7C00            	   182:     moveq.l #0,D6
+00:0000008A 1C3A05DD        	   183:     move.b  $d+sdBuf,D6                                 ; read number of sectors per cluster
+00:0000008E 33C6000008A8    	   184:     move.w  D6,sectorsPerCluster                        ; save as a word for later mulu
+                            	   185: 
+                            	   186:     ; Calculate the sector of the root directory: 
+                            	   187:     ; = sectors per FAT * number of FATs + number of reserved sectors
+                            	   188:     ; += partStartSector to allow for the start of the partition on the disk
+00:00000094 2A3A05EA        	   189:     move.l  $24+sdBuf,D5                                ; read sectors per FAT
+00:00000098 E15D            	   190:     rol.w   #8,D5
+00:0000009A 4845            	   191:     swap    D5
+00:0000009C E15D            	   192:     rol.w   #8,D5
+                            	   193:     
+00:0000009E 7C00            	   194:     moveq.l #0,D6                                       ; read number of FAT tables
+00:000000A0 1C3A05CA        	   195:     move.b  $10+sdBuf,D6
                             	   196: 
-                            	   197: ;    sector = sector of start of root directory
-                            	   198: ;    entry = 0
-                            	   199: ;    while (1) {
-                            	   200: ;      offset = entry % 16
-                            	   201: ;      if offset == 0 {
-                            	   202: ;        // read next sector
-                            	   203: ;        read next sector
-                            	   204: ;        increment sector
-                            	   205: ;      };;
-                            	   206: ;
-                            	   207: ;      directory_entry = offset * 32 plus buffer start
-                            	   208: ;
-                            	   209: ;      if directory_entry[0] == 0 { // end of root directory
-                            	   210: ;        message failure
-                            	   211: ;        return failure
-                            	   212: ;      }
-                            	   213: ;
-                            	   214: ;      if directory_entry[0xb] & 0x10 { // subdirectory
-                            	   215: ;        continue
-                            	   216: ;      }
-                            	   217: ;
-                            	   218: ;      if directory entry[0xb] == 0xf { // record contains a long file name
-                            	   219: ;        continue
-                            	   220: ;      }
-                            	   221: ;
-                            	   222: ;      if strncmp(directory entry, "CPMDISK IMG", 11) {
-                            	   223: ;        // found file, might have to ignore case here, lets see
-                            	   224: ;        // record sector file starts and file length
-                            	   225: ;        block = entry[20,21] << 16 + entry[26,27]
-                            	   226: ;        // both of these are store lsb first eg length of 0x7e84 is stored 84 7e 00 00
-                            	   227: ;        return success
-                            	   228: ;      }
-                            	   229: ;      entry++
-                            	   230: ;    }
-                            	   231: 
-                            	   232: 
-                            	   233:     ; search the FAT to try to find the CPM disk image
-00:000000BA 7600            	   234:     moveq.l #0,D3                                       ; sector to read
-00:000000BC 7800            	   235:     moveq.l #0,D4                                       ; directory entry in sector.  Sector is 512b, directory table i
-                            	   236: 
-                            	   237: .startDirectoryEntry:
-00:000000BE 2A04            	   238:     move.l  D4,D5
-00:000000C0 CABC0000000F    	   239:     and.l   #15,D5                                      ; only look at last 4 bits, we want to calculate (directory ent
-00:000000C6 6620            	   240:     bne     .noReadRequired                             ; we dont need to read a new sector from the sd card
-                            	   241: 
-                            	   242:     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
-00:000000C8 43FA07FE        	   243:     lea     sd,A1
-00:000000CC 7002            	   244:     moveq.l #2,D0                                       ; read sector trap
-00:000000CE 323A0840        	   245:     move.w  rootDirectorySector,D1
-00:000000D2 D243            	   246:     add.w   D3,D1                                       ; sector number to read plus offset to rootDirectoryCluster
-00:000000D4 45FA05F2        	   247:     lea     sdBuf,A2
-00:000000D8 4E4D            	   248:     trap    #13
-00:000000DA 4A80            	   249:     cmp.l   #0,D0                                       ; check return
-00:000000DC 6606            	   250:     bne     .noReadError
-00:000000DE 41FA0891        	   251:     lea     msgNoSdCardRead,A0
-00:000000E2 6072            	   252:     jmp     .errExit
-                            	   253: 
-                            	   254: .noReadError:
-00:000000E4 5283            	   255:     addq.l  #1,D3                                       ; increment next sector to read
-00:000000E6 7800            	   256:     moveq.l #0,D4                                       ; reset directory entry to zero 
-                            	   257: 
-                            	   258: .noReadRequired:
-00:000000E8 2A04            	   259:     move.l  D4,D5                                       ; D4 contains directory record
-00:000000EA EB8D            	   260:     lsl.l   #5,D5                                       ; multiply offset by 32 to get to start of directory record
-00:000000EC DABC000006C8    	   261:     add.l   #sdBuf,D5
-00:000000F2 2A45            	   262:     movea.l D5,A5
-00:000000F4 1C15            	   263:     move.b  (A5),D6
-00:000000F6 4A06            	   264:     tst.b   D6                                          ; reached end of root directory entries
-00:000000F8 6606            	   265:     bne     .notDirEnd
-00:000000FA 41FA08B2        	   266:     lea     msgNoCPMImage,A0
-00:000000FE 6056            	   267:     jmp     .errExit
-                            	   268: 
-                            	   269: .notDirEnd:
-00:00000100 1C2D000B        	   270:     move.b  $b(A5),D6
-00:00000104 BC3C0010        	   271:     cmp.b   #$10,D6
-00:00000108 6746            	   272:     beq     .nextDir                                    ; skip subdirectories entries
-00:0000010A BC3C000F        	   273:     cmp.b   #$f,D6
-00:0000010E 6740            	   274:     beq     .nextDir                                    ; skip long filename entries
-                            	   275: 
-                            	   276:     ; check to see if we have found the CPM Image file
-                            	   277:     ; The name CPMDISK.IMG is stored as "CPMDISK " then "IMG" in FAT32
-00:00000110 49FA080C        	   278:     LEA     imageName,A4
-00:00000114 BB8C            	   279:     cmp.l   (A4)+,(A5)+
-00:00000116 6638            	   280:     bne     .nextDir
-                            	   281:     debugPrintChar '1'
+00:000000A4 CCC5            	   197:     mulu.w  D5,D6
+00:000000A6 DC7A07FE        	   198:     add.w   reservedSectors,D6
+00:000000AA DCBA07F0        	   199:     add.l   partStartSector,D6                          ; partStartSector is a long
+00:000000AE 33C6000008A4    	   200:     move.w  D6,rootDirectorySector
+                            	   201: 
+                            	   202: 
+                            	   203: ;    sector = sector of start of root directory
+                            	   204: ;    entry = 0
+                            	   205: ;    while (1) {
+                            	   206: ;      offset = entry % 16
+                            	   207: ;      if offset == 0 {
+                            	   208: ;        // read next sector
+                            	   209: ;        read next sector
+                            	   210: ;        increment sector
+                            	   211: ;      };;
+                            	   212: ;
+                            	   213: ;      directory_entry = offset * 32 plus buffer start
+                            	   214: ;
+                            	   215: ;      if directory_entry[0] == 0 { // end of root directory
+                            	   216: ;        message failure
+                            	   217: ;        return failure
+                            	   218: ;      }
+                            	   219: ;
+                            	   220: ;      if directory_entry[0xb] & 0x10 { // subdirectory
+                            	   221: ;        continue
+                            	   222: ;      }
+                            	   223: ;
+                            	   224: ;      if directory entry[0xb] == 0xf { // record contains a long file name
+                            	   225: ;        continue
+                            	   226: ;      }
+                            	   227: ;
+                            	   228: ;      if strncmp(directory entry, "CPMDISK IMG", 11) {
+                            	   229: ;        // found file, might have to ignore case here, lets see
+                            	   230: ;        // record sector file starts and file length
+                            	   231: ;        block = entry[20,21] << 16 + entry[26,27]
+                            	   232: ;        // both of these are store lsb first eg length of 0x7e84 is stored 84 7e 00 00
+                            	   233: ;        return success
+                            	   234: ;      }
+                            	   235: ;      entry++
+                            	   236: ;    }
+                            	   237: 
+                            	   238: 
+                            	   239:     ; search the FAT to try to find the CPM disk image
+00:000000B4 7600            	   240:     moveq.l #0,D3                                       ; sector to read
+00:000000B6 7800            	   241:     moveq.l #0,D4                                       ; directory entry in sector.  Sector is 512b, directory table i
+                            	   242: 
+                            	   243: .startDirectoryEntry:
+00:000000B8 2A04            	   244:     move.l  D4,D5
+00:000000BA CABC0000000F    	   245:     and.l   #15,D5                                      ; only look at last 4 bits, we want to calculate (directory ent
+00:000000C0 6620            	   246:     bne     .noReadRequired                             ; we dont need to read a new sector from the sd card
+                            	   247: 
+                            	   248:     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
+00:000000C2 43FA0798        	   249:     lea     sd,A1
+00:000000C6 7002            	   250:     moveq.l #2,D0                                       ; read sector trap
+00:000000C8 323A07DA        	   251:     move.w  rootDirectorySector,D1
+00:000000CC D243            	   252:     add.w   D3,D1                                       ; sector number to read plus offset to rootDirectoryCluster
+00:000000CE 45FA058C        	   253:     lea     sdBuf,A2
+00:000000D2 4E4D            	   254:     trap    #13
+00:000000D4 4A80            	   255:     cmp.l   #0,D0                                       ; check return
+00:000000D6 6606            	   256:     bne     .noReadError
+00:000000D8 41FA082B        	   257:     lea     msgNoSdCardRead,A0
+00:000000DC 6072            	   258:     jmp     .errExit
+                            	   259: 
+                            	   260: .noReadError:
+00:000000DE 5283            	   261:     addq.l  #1,D3                                       ; increment next sector to read
+00:000000E0 7800            	   262:     moveq.l #0,D4                                       ; reset directory entry to zero 
+                            	   263: 
+                            	   264: .noReadRequired:
+00:000000E2 2A04            	   265:     move.l  D4,D5                                       ; D4 contains directory record
+00:000000E4 EB8D            	   266:     lsl.l   #5,D5                                       ; multiply offset by 32 to get to start of directory record
+00:000000E6 DABC0000065C    	   267:     add.l   #sdBuf,D5
+00:000000EC 2A45            	   268:     movea.l D5,A5
+00:000000EE 1C15            	   269:     move.b  (A5),D6
+00:000000F0 4A06            	   270:     tst.b   D6                                          ; reached end of root directory entries
+00:000000F2 6606            	   271:     bne     .notDirEnd
+00:000000F4 41FA084C        	   272:     lea     msgNoCPMImage,A0
+00:000000F8 6056            	   273:     jmp     .errExit
+                            	   274: 
+                            	   275: .notDirEnd:
+00:000000FA 1C2D000B        	   276:     move.b  $b(A5),D6
+00:000000FE BC3C0010        	   277:     cmp.b   #$10,D6
+00:00000102 6746            	   278:     beq     .nextDir                                    ; skip subdirectories entries
+00:00000104 BC3C000F        	   279:     cmp.b   #$f,D6
+00:00000108 6740            	   280:     beq     .nextDir                                    ; skip long filename entries
+                            	   281: 
+                            	   282:     ; check to see if we have found the CPM Image file
+                            	   283:     ; The name CPMDISK.IMG is stored as "CPMDISK " then "IMG" in FAT32
+00:0000010A 49FA07A6        	   284:     LEA     imageName,A4
+00:0000010E BB8C            	   285:     cmp.l   (A4)+,(A5)+
+00:00000110 6638            	   286:     bne     .nextDir
+                            	   287:     debugPrintChar '1'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -293,9 +299,9 @@ Source: "bios.asm"
                             	     7M     
                             	     8M         movem.l (A7)+,D0-D3/A0-A3
                             	     9M     ENDIF
-00:00000118 BB8C            	   282:     cmp.l   (A4)+,(A5)+
-00:0000011A 6634            	   283:     bne     .nextDir
-                            	   284:     debugPrintChar '2'
+00:00000112 BB8C            	   288:     cmp.l   (A4)+,(A5)+
+00:00000114 6634            	   289:     bne     .nextDir
+                            	   290:     debugPrintChar '2'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -305,11 +311,11 @@ Source: "bios.asm"
                             	     7M     
                             	     8M         movem.l (A7)+,D0-D3/A0-A3
                             	     9M     ENDIF
-00:0000011C 2C15            	   285:     move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
-00:0000011E 4206            	   286:     clr.b   D6
-00:00000120 BC94            	   287:     cmp.l   (A4),D6
-00:00000122 662C            	   288:     bne     .nextDir
-                            	   289:     debugPrintChar '3'
+00:00000116 2C15            	   291:     move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
+00:00000118 4206            	   292:     clr.b   D6
+00:0000011A BC94            	   293:     cmp.l   (A4),D6
+00:0000011C 662C            	   294:     bne     .nextDir
+                            	   295:     debugPrintChar '3'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -319,169 +325,179 @@ Source: "bios.asm"
                             	     7M     
                             	     8M         movem.l (A7)+,D0-D3/A0-A3
                             	     9M     ENDIF
-                            	   290: 
-                            	   291:     ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
-                            	   292:     ;        block = entry[20,21] << 16 + entry[26,27]
-                            	   293:     ; get starting block of CPMDISK.IMG
-00:00000124 3C2D000C        	   294:     move.w  $c(A5),D6                                   
-00:00000128 E15E            	   295:     rol.w   #8,D6
-00:0000012A 4846            	   296:     swap    D6
-00:0000012C 3C2D0012        	   297:     move.w  $12(A5),D6
-00:00000130 E15E            	   298:     rol.w   #8,D6
-                            	   299: 
-00:00000132 9CBA07D8        	   300:     sub.l   (rootDirectoryCluster),D6                   ; allow for the position of the root directory (usually 2)
-00:00000136 CCFA07DC        	   301:     mulu.w  (sectorsPerCluster),D6  
-                            	   302: 
-                            	   303:     ; for efficiency we will point CPMImageSector at the actual block on the sd card
-00:0000013A DC7A07D4        	   304:     add.w  (rootDirectorySector),D6
-00:0000013E 23C600000916    	   305:     move.l D6,CPMImageSector
-                            	   306: 
-00:00000144 21FC0000015E008C	   307:     move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
-00:0000014C 7000            	   308:     moveq.l #0,D0                                       ; log on disk A, user 0
-00:0000014E 4E75            	   309:     rts
-                            	   310: 
-                            	   311: .nextDir:
-00:00000150 5284            	   312:     addq.l  #1,D4                                       ; look at next directory entry
-00:00000152 6000FF6A        	   313:     jmp     .startDirectoryEntry
-                            	   314: 
-                            	   315: .errExit:
-00:00000156 7201            	   316:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
-00:00000158 4E4E            	   317:     trap    #14                          
-00:0000015A 7001            	   318:     moveq.l #1,D0                                       ; signal error
-00:0000015C 4E75            	   319:     rts
+                            	   296: 
+                            	   297:     ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
+                            	   298:     ;        block = entry[20,21] << 16 + entry[26,27]
+                            	   299:     ; get starting block of CPMDISK.IMG
+00:0000011E 3C2D000C        	   300:     move.w  $c(A5),D6                                   
+00:00000122 E15E            	   301:     rol.w   #8,D6
+00:00000124 4846            	   302:     swap    D6
+00:00000126 3C2D0012        	   303:     move.w  $12(A5),D6
+00:0000012A E15E            	   304:     rol.w   #8,D6
+                            	   305: 
+00:0000012C 9CBA0772        	   306:     sub.l   (rootDirectoryCluster),D6                   ; allow for the position of the root directory (usually 2)
+00:00000130 CCFA0776        	   307:     mulu.w  (sectorsPerCluster),D6  
+                            	   308: 
+                            	   309:     ; for efficiency we will point CPMImageSector at the actual block on the sd card
+00:00000134 DC7A076E        	   310:     add.w  (rootDirectorySector),D6
+00:00000138 23C6000008AA    	   311:     move.l D6,CPMImageSector
+                            	   312: 
+00:0000013E 21FC00000158008C	   313:     move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
+00:00000146 7000            	   314:     moveq.l #0,D0                                       ; log on disk A, user 0
+00:00000148 4E75            	   315:     rts
+                            	   316: 
+                            	   317: .nextDir:
+00:0000014A 5284            	   318:     addq.l  #1,D4                                       ; look at next directory entry
+00:0000014C 6000FF6A        	   319:     jmp     .startDirectoryEntry
                             	   320: 
-                            	   321: TRAPHNDL:
-00:0000015E 0C400017        	   322:     cmpi    #23,D0                                      ; Function call in range ?
-00:00000162 6408            	   323:     bcc     TRAPNG
-                            	   324: 
-00:00000164 E588            	   325:     lsl.l   #2,D0                                       ; change function call to offset by multiplting by 4
-00:00000166 207B0006        	   326:     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
-00:0000016A 4E90            	   327:     jsr     (A0)                        ; ... then jump there
-                            	   328: 
-                            	   329: TRAPNG:
-00:0000016C 4E73            	   330:     rte
-                            	   331: 
-                            	   332: BIOSBASE:
-00:0000016E 00000000        	   333:     dc.l    _init
-00:00000172 000001CA        	   334:     dc.l    WBOOT
-00:00000176 000001D0        	   335:     dc.l    CONSTAT
-00:0000017A 000001DA        	   336:     dc.l    CONIN
-00:0000017E 000001E8        	   337:     dc.l    CONOUT
-00:00000182 000001EE        	   338:     dc.l    LSTOUT
-00:00000186 000001EE        	   339:     dc.l    PUN
-00:0000018A 000001EE        	   340:     dc.l    RDR
-00:0000018E 000001F8        	   341:     dc.l    HOME
-00:00000192 00000200        	   342:     dc.l    SELDSK
-00:00000196 00000224        	   343:     dc.l    SETTRK
-00:0000019A 0000022C        	   344:     dc.l    SETSEC
-00:0000019E 00000238        	   345:     dc.l    SETDMA
-00:000001A2 00000240        	   346:     dc.l    READ
-00:000001A6 00000324        	   347:     dc.l    WRITE
-00:000001AA 000001F2        	   348:     dc.l    LISTST
-00:000001AE 00000234        	   349:     dc.l    SECTRAN
-00:000001B2 00000238        	   350:     dc.l    SETDMA
-00:000001B6 000003AA        	   351:     dc.l    GETSEG
-00:000001BA 000001EE        	   352:     dc.l    GETIOB
-00:000001BE 000001EE        	   353:     dc.l    SETIOB
-00:000001C2 000003A6        	   354:     dc.l    FLUSH
-00:000001C6 000003B2        	   355:     dc.l    SETEXC
-                            	   356: 
-                            	   357: 
-                            	   358: WBOOT:  
-00:000001CA 4EF9000150BC    	   359:     jmp     _ccp
-                            	   360: 
-                            	   361: CONSTAT: 
-                            	   362: ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
-00:000001D0 7007            	   363:     moveq.l #7,D0                        ; use EASy68k trap 15 task 7
-00:000001D2 4E4F            	   364:     trap    #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
-00:000001D4 7000            	   365:     moveq.l #0,D0
-00:000001D6 1001            	   366:     move.b  D1,D0
-00:000001D8 4E75            	   367:     rts
-                            	   368:          
-                            	   369: CONIN:    
-                            	   370: ; Read single ASCII character from the keyboard into d0
-                            	   371: ; Rosco implementation of this trap waits for input
-00:000001DA 7005            	   372:     moveq.l #5,D0                        ; use EASy68k trap 15 task 5
-00:000001DC 4E4F            	   373:     trap    #15                          ; d1.b contains the ascii character
-00:000001DE 1001            	   374:     move.b  D1,D0      
-00:000001E0 C0BC0000007F    	   375:     and.l   #$7f,D0                      ; only use 7 bit character set
-00:000001E6 4E75            	   376:     rts
-                            	   377: 
-                            	   378: CONOUT: 
-                            	   379: ; Display single ASCII character in d1
-00:000001E8 7006            	   380:     moveq.l #6,D0                        ; use EASy68k trap 15 task 6
-00:000001EA 4E4F            	   381:     trap    #15
-00:000001EC 4E75            	   382:     rts                                  ; and exit
+                            	   321: .errExit:
+00:00000150 7201            	   322:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
+00:00000152 4E4E            	   323:     trap    #14                          
+00:00000154 7001            	   324:     moveq.l #1,D0                                       ; signal error
+00:00000156 4E75            	   325:     rts
+                            	   326: 
+                            	   327: TRAPHNDL:
+00:00000158 0C400017        	   328:     cmpi    #23,D0                                      ; Function call in range ?
+00:0000015C 6408            	   329:     bcc     TRAPNG
+                            	   330: 
+00:0000015E E588            	   331:     lsl.l   #2,D0                                       ; change function call to offset by multiplting by 4
+00:00000160 207B0006        	   332:     move.l  BIOSBASE(PC,D0),A0          ; ... and calc offset into table...
+00:00000164 4E90            	   333:     jsr     (A0)                        ; ... then jump there
+                            	   334: 
+                            	   335: TRAPNG:
+00:00000166 4E73            	   336:     rte
+                            	   337: 
+                            	   338: BIOSBASE:
+00:00000168 00000000        	   339:     dc.l    _init
+00:0000016C 000001C4        	   340:     dc.l    WBOOT
+00:00000170 000001CA        	   341:     dc.l    CONSTAT
+00:00000174 000001D4        	   342:     dc.l    CONIN
+00:00000178 000001E2        	   343:     dc.l    CONOUT
+00:0000017C 000001E8        	   344:     dc.l    LSTOUT
+00:00000180 000001E8        	   345:     dc.l    PUN
+00:00000184 000001E8        	   346:     dc.l    RDR
+00:00000188 000001F2        	   347:     dc.l    HOME
+00:0000018C 000001FA        	   348:     dc.l    SELDSK
+00:00000190 0000021E        	   349:     dc.l    SETTRK
+00:00000194 00000226        	   350:     dc.l    SETSEC
+00:00000198 00000232        	   351:     dc.l    SETDMA
+00:0000019C 0000023C        	   352:     dc.l    READ
+00:000001A0 000002EE        	   353:     dc.l    WRITE
+00:000001A4 000001EC        	   354:     dc.l    LISTST
+00:000001A8 0000022E        	   355:     dc.l    SECTRAN
+00:000001AC 0000023A        	   356:     dc.l    SETDMA2
+00:000001B0 00000340        	   357:     dc.l    GETSEG
+00:000001B4 000001E8        	   358:     dc.l    GETIOB
+00:000001B8 000001E8        	   359:     dc.l    SETIOB
+00:000001BC 0000033C        	   360:     dc.l    FLUSH
+00:000001C0 00000348        	   361:     dc.l    SETEXC
+                            	   362: 
+                            	   363: 
+                            	   364: WBOOT:  
+00:000001C4 4EF9000150BC    	   365:     jmp     _ccp
+                            	   366: 
+                            	   367: CONSTAT: 
+                            	   368: ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
+00:000001CA 7007            	   369:     moveq.l #7,D0                        ; use EASy68k trap 15 task 7
+00:000001CC 4E4F            	   370:     trap    #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
+00:000001CE 7000            	   371:     moveq.l #0,D0
+00:000001D0 1001            	   372:     move.b  D1,D0
+00:000001D2 4E75            	   373:     rts
+                            	   374:          
+                            	   375: CONIN:    
+                            	   376: ; Read single ASCII character from the keyboard into d0
+                            	   377: ; Rosco implementation of this trap waits for input
+00:000001D4 7005            	   378:     moveq.l #5,D0                        ; use EASy68k trap 15 task 5
+00:000001D6 4E4F            	   379:     trap    #15                          ; d1.b contains the ascii character
+00:000001D8 1001            	   380:     move.b  D1,D0      
+00:000001DA C0BC0000007F    	   381:     and.l   #$7f,D0                      ; only use 7 bit character set
+00:000001E0 4E75            	   382:     rts
                             	   383: 
-                            	   384: LSTOUT:    
-                            	   385: PUN:
-                            	   386: RDR:
-                            	   387: GETIOB:
-                            	   388: SETIOB:
-00:000001EE 7000            	   389:     moveq.l #0,D0
-00:000001F0 4E75            	   390:     rts
-                            	   391: 
-                            	   392: LISTST:    
-00:000001F2 103C00FF        	   393:     move.b #$ff,D0
-00:000001F6 4E75            	   394:     rts
-                            	   395: 
-                            	   396: HOME:    
-00:000001F8 4279000003DE    	   397:     clr.w  TRACK
-00:000001FE 4E75            	   398:     rts
-                            	   399: 
-                            	   400: SELDSK:    
-                            	   401: ; drive should be in d1.b
-00:00000200 B23C0001        	   402:     cmp.b   #1,D1
-00:00000204 670E            	   403:     beq     .seldrive1     
-00:00000206 4239000003DC    	   404:     move.b  #0,SELDRV
-00:0000020C 203C000003F2    	   405:     move.l  #DPH0,D0
-00:00000212 4E75            	   406:     rts
-                            	   407: 
-                            	   408: .seldrive1
-00:00000214 13FC0001000003DC	   409:     move.b  #1,SELDRV
-00:0000021C 203C0000041C    	   410:     move.l  #DPH1,D0
-00:00000222 4E75            	   411:     rts
-                            	   412: 
-                            	   413: SETTRK:    
-00:00000224 33C1000003DE    	   414:     move.w  D1,TRACK
-00:0000022A 4E75            	   415:     rts
-                            	   416: 
-                            	   417: SETSEC:    
-00:0000022C 33C1000003E0    	   418:     move.w  D1,SECTOR
-00:00000232 4E75            	   419:     rts
-                            	   420: 
-                            	   421: SECTRAN:
-                            	   422: ;    no sector translate, put d1 into d0 and return
-00:00000234 3001            	   423:     move.w  D1,D0
-00:00000236 4E75            	   424:     rts
-                            	   425: 
-                            	   426: SETDMA:
-00:00000238 23C1000003E2    	   427:     move.l  D1,DMA
-00:0000023E 4E75            	   428:     rts
-                            	   429: 
-                            	   430: READ:
-                            	   431: ; Read one cpm sector from requested disk, track, sector to dma address
-                            	   432: ; Can be a cpmimage on the sd card or the ram disk
-00:00000240 4A39000003DC    	   433:     cmp.b   #0,SELDRV
-00:00000246 662A            	   434:     bne     .readRAMDrive
+                            	   384: CONOUT: 
+                            	   385: ; Display single ASCII character in d1
+00:000001E2 7006            	   386:     moveq.l #6,D0                        ; use EASy68k trap 15 task 6
+00:000001E4 4E4F            	   387:     trap    #15
+00:000001E6 4E75            	   388:     rts                                  ; and exit
+                            	   389: 
+                            	   390: LSTOUT:    
+                            	   391: PUN:
+                            	   392: RDR:
+                            	   393: GETIOB:
+                            	   394: SETIOB:
+00:000001E8 7000            	   395:     moveq.l #0,D0
+00:000001EA 4E75            	   396:     rts
+                            	   397: 
+                            	   398: LISTST:    
+00:000001EC 103C00FF        	   399:     move.b #$ff,D0
+00:000001F0 4E75            	   400:     rts
+                            	   401: 
+                            	   402: HOME:    
+00:000001F2 427900000372    	   403:     clr.w  TRACK
+00:000001F8 4E75            	   404:     rts
+                            	   405: 
+                            	   406: SELDSK:    
+                            	   407: ; drive should be in d1.b
+00:000001FA B23C0001        	   408:     cmp.b   #1,D1
+00:000001FE 670E            	   409:     beq     .seldrive1     
+00:00000200 423900000370    	   410:     move.b  #0,SELDRV
+00:00000206 203C00000386    	   411:     move.l  #DPH0,D0
+00:0000020C 4E75            	   412:     rts
+                            	   413: 
+                            	   414: .seldrive1
+00:0000020E 13FC000100000370	   415:     move.b  #1,SELDRV
+00:00000216 203C000003B0    	   416:     move.l  #DPH1,D0
+00:0000021C 4E75            	   417:     rts
+                            	   418: 
+                            	   419: SETTRK:    
+00:0000021E 33C100000372    	   420:     move.w  D1,TRACK
+00:00000224 4E75            	   421:     rts
+                            	   422: 
+                            	   423: SETSEC:    
+00:00000226 33C100000374    	   424:     move.w  D1,SECTOR
+00:0000022C 4E75            	   425:     rts
+                            	   426: 
+                            	   427: SECTRAN:
+                            	   428: ;    no sector translate, put d1 into d0 and return
+00:0000022E 3001            	   429:     move.w  D1,D0
+00:00000230 4E75            	   430:     rts
+                            	   431: 
+                            	   432: SETDMA:
+00:00000232 23C100000376    	   433:     move.l  D1,DMA
+00:00000238 4E75            	   434:     rts
                             	   435: 
-00:00000248 6172            	   436:     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentiall
-00:0000024A 227A0196        	   437:     move.l  DMA,A1
-                            	   438:     copyData
-00:0000024E 4CD83CFF        	     1M     movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-00:00000252 48D13CFF        	     2M     movem.l D0-D7/A2-A5,(A1)
-00:00000256 43E90030        	     3M     adda.w  #48,A1                                      ; 12 * 4
-00:0000025A 4CD83CFF        	     4M     movem.l (A0)+,D0-D7/A2-A5                               
-00:0000025E 48D13CFF        	     5M     movem.l D0-D7/A2-A5,(A1)
-00:00000262 43E90030        	     6M     adda.w  #48,A1
-00:00000266 4CD800FF        	     7M     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-00:0000026A 48D100FF        	     8M     movem.l D0-D7,(A1)
-00:0000026E 7000            	   439:     moveq.l #0,D0                                       ; return OK status         
-00:00000270 4E75            	   440:     rts
-                            	   441: 
-                            	   442: .readRAMDrive:
-00:00000272 6128            	   443:     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
-                            	   444:     debugPrintRAM 'R'
+                            	   436: SETDMA2:
+                            	   437:     debugPrintChar '*'
+                            	     1M     IFNE DEBUG
+                            	     2M         movem.l D0-D3/A0-A3,-(A7)
+                            	     3M 
+                            	     4M         moveq.l #6,D0                                   
+                            	     5M         move.b  #'*',D1                                     
+                            	     6M         trap    #15
+                            	     7M     
+                            	     8M         movem.l (A7)+,D0-D3/A0-A3
+                            	     9M     ENDIF
+00:0000023A 4E75            	   438:     rts
+                            	   439: 
+                            	   440: READ:
+                            	   441: ; Read one cpm sector from requested disk, track, sector to dma address
+                            	   442: ; Can be a cpmimage on the sd card or the ram disk
+00:0000023C 4A3900000370    	   443:     cmp.b   #0,SELDRV
+00:00000242 6612            	   444:     bne     .readRAMDrive
+                            	   445: 
+00:00000244 6142            	   446:     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentiall
+00:00000246 227A012E        	   447:     move.l  DMA,A1
+00:0000024A 701F            	   448:     move.l  #(128/4-1),d0  
+                            	   449: 
+                            	   450: .MOVE_LOOP1:
+00:0000024C 22D8            	   451:     MOVE.L  (A0)+,(A1)+                                 ; copy long word from source to dest
+00:0000024E 51C8FFFC        	   452:     dbra    D0,.MOVE_LOOP1
+                            	   453:     
+00:00000252 7000            	   454:     moveq.l #0,D0                                       ; return OK status         
+00:00000254 4E75            	   455:     rts
+                            	   456: 
+                            	   457: .readRAMDrive:
+00:00000256 6110            	   458:     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
+                            	   459:     debugPrintRAM 'R'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -497,94 +513,100 @@ Source: "bios.asm"
                             	    13M         trap    #15
                             	    14M 
                             	    15M         moveq.l #6,D0
-                            	    16M         move.b  #' ',D1                                     
+                            	    16M         move.b  #'-',D1                                     
                             	    17M         trap    #15
                             	    18M 
-                            	    19M         movem.l (A7)+,D0-D3/A0-A3
-                            	    20M     ENDIF
-00:00000274 227A016C        	   445:     move.l  DMA,A1
-                            	   446:     copyData
-00:00000278 4CD83CFF        	     1M     movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-00:0000027C 48D13CFF        	     2M     movem.l D0-D7/A2-A5,(A1)
-00:00000280 43E90030        	     3M     adda.w  #48,A1                                      ; 12 * 4
-00:00000284 4CD83CFF        	     4M     movem.l (A0)+,D0-D7/A2-A5                               
-00:00000288 48D13CFF        	     5M     movem.l D0-D7/A2-A5,(A1)
-00:0000028C 43E90030        	     6M     adda.w  #48,A1
-00:00000290 4CD800FF        	     7M     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-00:00000294 48D100FF        	     8M     movem.l D0-D7,(A1)
-00:00000298 7000            	   447:     moveq.l #0,D0                                       ; return OK status         
-00:0000029A 4E75            	   448:     rts         
-                            	   449: 
-                            	   450: setupReadRAM:
-                            	   451: ; translate track/sector into RAM location on the RAM drive
-00:0000029C 7000            	   452:     moveq.l #0,D0
-00:0000029E 303A013E        	   453:     move.w  TRACK,D0
-00:000002A2 760C            	   454:     moveq.l #12,D3                                      ; much faster than shifting by 8 then 4 (40 versus 12 cycles)
-00:000002A4 E7A8            	   455:     lsl.l   D3,D0
-                            	   456: 
-00:000002A6 7400            	   457:     moveq.l #0,D2
-00:000002A8 343A0136        	   458:     move.w  SECTOR,D2
-00:000002AC 7607            	   459:     moveq.l #7,D3                                       ; much faster than shifting by 7 (22 versus 12 cycles)
-00:000002AE E7AA            	   460:     lsl.l   D3,D2
-                            	   461: 
-00:000002B0 D082            	   462:     add.l   D2,D0
-00:000002B2 D0BC000C0000    	   463:     add.l   #ramDriveLocation,D0                        ; add base address of RAM drive
-00:000002B8 2040            	   464:     movea.l D0,A0                                       ; point to the track/sector in RAM drive
-00:000002BA 4E75            	   465:     rts
+                            	    19M         moveq.l #15,D0
+                            	    20M         move.l  (DMA),D1                          ; sector in hex
+                            	    21M         move.b  #16,D2
+                            	    22M         trap    #15
+                            	    23M 
+                            	    24M         moveq.l #6,D0
+                            	    25M         move.b  #' ',D1                                     
+                            	    26M         trap    #15
+                            	    27M 
+                            	    28M         movem.l (A7)+,D0-D3/A0-A3
+                            	    29M     ENDIF
+00:00000258 227A011C        	   460:     move.l  DMA,A1
+00:0000025C 701F            	   461:     move.l  #(128/4-1),d0  
+                            	   462: 
+                            	   463: .MOVE_LOOP2:
+00:0000025E 22D8            	   464:     MOVE.L  (A0)+,(A1)+                                 ; copy long word from source to dest
+00:00000260 51C8FFFC        	   465:     dbra    D0,.MOVE_LOOP2
                             	   466: 
-                            	   467: setupReadDisk:
-                            	   468: ;
-                            	   469: ; algorithm
-                            	   470: ;
-                            	   471: ; keep 512b in a memory buffer
-                            	   472: ; keep sector number of the data currently in the buffer
-                            	   473: ;
-                            	   474: ; if requested sector not in buffer {
-                            	   475: ;     calcuate the sector and offset that the FAT entry for the sector is located in
-                            	   476: ;     read sector pointed to in FAT table from disk into buffer
-                            	   477: ;     note requested sector in buffer
-                            	   478: ; }
-                            	   479: ;
-                            	   480: ; calculate offset of CPM 128b required in 512b buffer
-                            	   481: ; copy the correct 12b across into the CPM dma area
-                            	   482: 
-                            	   483:     ; start by calculating the requested (FAT32) sector number from TRACK and SECTOR in D0
-                            	   484:     ; also calculate the offset into that 512b buffer for the 128b CPM sector data in D3
-00:000002BC 7200            	   485:     moveq.l #0,D1
-00:000002BE 323A011E        	   486:     move.w  TRACK,D1
-00:000002C2 E789            	   487:     lsl.l   #3,D1
-                            	   488: 
-00:000002C4 7400            	   489:     moveq.l #0,D2
-00:000002C6 343A0118        	   490:     move.w  SECTOR,D2
-                            	   491: 
-00:000002CA 2602            	   492:     move.l  D2,D3
-00:000002CC C6BC00000003    	   493:     and.l   #3,D3                                       ; use D3 to calculate the offset of the 128b CPM sector in the 
-00:000002D2 7807            	   494:     moveq.l #7,D4                                       ; much faster than shifting by 7 (22 versus 12 cycles)
-00:000002D4 E9AB            	   495:     lsl.l   D4,D3
-                            	   496: 
-00:000002D6 E48A            	   497:     lsr.l   #2,D2
-00:000002D8 D282            	   498:     add.l   D2,D1                                        ; D1 now has the requested sector number
-00:000002DA D2BA063A        	   499:     add.l   (CPMImageSector),D1                          ; D1 now has the actual sector on the SD card
-                            	   500: 
-                            	   501:     ; check to see if this FAT32 sector already in memory
-00:000002DE B2BA063A        	   502:     cmp.l (lastFATSector),D1
-00:000002E2 6738            	   503:     beq   .noDiskReadRequired
-                            	   504: 
-                            	   505:     ; we are going to read the sector (hopefully) so update the last read FAT sector before we lose the contents of D1
-00:000002E4 23C10000091A    	   506:     move.l D1,lastFATSector
-                            	   507: 
-                            	   508:     ; we assume that the FAT table is contiguous for the CP/M image
-                            	   509:     ; file, this avoids a walk of the FAT table linked list .. but wont deal with any bad sectors on the sd card
-                            	   510: 
-00:000002EA 43FA05DC        	   511:     lea     sd,A1
-00:000002EE 7002            	   512:     moveq.l #2,D0                                        ; read sector function code
-00:000002F0 45FA03D6        	   513:     lea     sdBuf,A2
-00:000002F4 4E4D            	   514:     trap    #13
-00:000002F6 4A80            	   515:     cmp.l   #0,D0                                        ; check return
-00:000002F8 6622            	   516:     bne     .noDiskReadError
-                            	   517: 
-                            	   518:     ; if we get here we had a disk read error
-                            	   519:     debugPrintSector 'E'
+00:00000264 7000            	   467:     moveq.l #0,D0                                       ; return OK status         
+00:00000266 4E75            	   468:     rts         
+                            	   469: 
+                            	   470: setupReadRAM:
+                            	   471: ; translate track/sector into RAM location on the RAM drive
+00:00000268 7000            	   472:     moveq.l #0,D0
+00:0000026A 303A0106        	   473:     move.w  TRACK,D0
+00:0000026E 760C            	   474:     moveq.l #12,D3                                      ; much faster than shifting by 8 then 4 (40 versus 12 cycles)
+00:00000270 E7A8            	   475:     lsl.l   D3,D0
+                            	   476: 
+00:00000272 7400            	   477:     moveq.l #0,D2
+00:00000274 343A00FE        	   478:     move.w  SECTOR,D2
+00:00000278 7607            	   479:     moveq.l #7,D3                                       ; much faster than shifting by 7 (22 versus 12 cycles)
+00:0000027A E7AA            	   480:     lsl.l   D3,D2
+                            	   481: 
+00:0000027C D082            	   482:     add.l   D2,D0
+00:0000027E D0BC000C0000    	   483:     add.l   #ramDriveLocation,D0                        ; add base address of RAM drive
+00:00000284 2040            	   484:     movea.l D0,A0                                       ; point to the track/sector in RAM drive
+00:00000286 4E75            	   485:     rts
+                            	   486: 
+                            	   487: setupReadDisk:
+                            	   488: ;
+                            	   489: ; algorithm
+                            	   490: ;
+                            	   491: ; keep 512b in a memory buffer
+                            	   492: ; keep sector number of the data currently in the buffer
+                            	   493: ;
+                            	   494: ; if requested sector not in buffer {
+                            	   495: ;     calcuate the sector and offset that the FAT entry for the sector is located in
+                            	   496: ;     read sector pointed to in FAT table from disk into buffer
+                            	   497: ;     note requested sector in buffer
+                            	   498: ; }
+                            	   499: ;
+                            	   500: ; calculate offset of CPM 128b required in 512b buffer
+                            	   501: ; copy the correct 12b across into the CPM dma area
+                            	   502: 
+                            	   503:     ; start by calculating the requested (FAT32) sector number from TRACK and SECTOR in D0
+                            	   504:     ; also calculate the offset into that 512b buffer for the 128b CPM sector data in D3
+00:00000288 7200            	   505:     moveq.l #0,D1
+00:0000028A 323A00E6        	   506:     move.w  TRACK,D1
+00:0000028E E789            	   507:     lsl.l   #3,D1
+                            	   508: 
+00:00000290 7400            	   509:     moveq.l #0,D2
+00:00000292 343A00E0        	   510:     move.w  SECTOR,D2
+                            	   511: 
+00:00000296 2602            	   512:     move.l  D2,D3
+00:00000298 C6BC00000003    	   513:     and.l   #3,D3                                       ; use D3 to calculate the offset of the 128b CPM sector in the 
+00:0000029E 7807            	   514:     moveq.l #7,D4                                       ; much faster than shifting by 7 (22 versus 12 cycles)
+00:000002A0 E9AB            	   515:     lsl.l   D4,D3
+                            	   516: 
+00:000002A2 E48A            	   517:     lsr.l   #2,D2
+00:000002A4 D282            	   518:     add.l   D2,D1                                        ; D1 now has the requested sector number
+00:000002A6 D2BA0602        	   519:     add.l   (CPMImageSector),D1                          ; D1 now has the actual sector on the SD card
+                            	   520: 
+                            	   521:     ; check to see if this FAT32 sector already in memory
+00:000002AA B2BA0602        	   522:     cmp.l (lastFATSector),D1
+00:000002AE 6736            	   523:     beq   .noDiskReadRequired
+                            	   524: 
+                            	   525:     ; we are going to read the sector (hopefully) so update the last read FAT sector before we lose the contents of D1
+00:000002B0 23C1000008AE    	   526:     move.l D1,lastFATSector
+                            	   527: 
+                            	   528:     ; we assume that the FAT table is contiguous for the CP/M image
+                            	   529:     ; file, this avoids a walk of the FAT table linked list .. but wont deal with any bad sectors on the sd card
+                            	   530: 
+00:000002B6 43FA05A4        	   531:     lea     sd,A1
+00:000002BA 7002            	   532:     moveq.l #2,D0                                        ; read sector function code
+00:000002BC 45FA039E        	   533:     lea     sdBuf,A2
+00:000002C0 4E4D            	   534:     trap    #13
+00:000002C2 4A80            	   535:     cmp.l   #0,D0                                        ; check return
+00:000002C4 6620            	   536:     bne     .noDiskReadError
+                            	   537: 
+                            	   538:     ; if we get here we had a disk read error
+                            	   539:     debugPrintSector 'E'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -607,27 +629,34 @@ Source: "bios.asm"
                             	    20M         trap    #15
                             	    21M 
                             	    22M         moveq.l #6,D0
-                            	    23M         move.b  #' ',D1                                     
+                            	    23M         move.b  #'-',D1                                     
                             	    24M         trap    #15
                             	    25M 
-                            	    26M         movem.l (A7)+,D0-D3/A0-A3
-                            	    27M     ENDIF
-                            	   520:     
-00:000002FA 41FA0675        	   521:     lea     msgNoSdCardRead,A0
-00:000002FE 7201            	   522:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
-00:00000300 4E4E            	   523:     trap    #14                         
-00:00000302 7001            	   524:     moveq.l #1,D0                                       ; signal error
-                            	   525: 
-00:00000304 23FCFFFFFFFF0000	   526:     move.l  #-1,lastFATSector
-00:0000030C 091A
-                            	   527: 
-00:0000030E 41FA03B8        	   528:     lea     sdBuf,A0
-00:00000312 227A00CE        	   529:     move.l  DMA,A1
-00:00000316 143C00FF        	   530:     move.b  #$ff,D2
-00:0000031A 4E75            	   531:     rts                                                 ; Mmm .. doesn't flag an error, BIOS will continue 
-                            	   532: 
-                            	   533: .noDiskReadError:
-                            	   534:     debugPrintSector 'R'
+                            	    26M         moveq.l #15,D0
+                            	    27M         move.l  (DMA),D1                          ; sector in hex
+                            	    28M         move.b  #16,D2
+                            	    29M         trap    #15
+                            	    30M 
+                            	    31M         moveq.l #6,D0
+                            	    32M         move.b  #' ',D1                                     
+                            	    33M         trap    #15
+                            	    34M 
+                            	    35M         movem.l (A7)+,D0-D3/A0-A3
+                            	    36M     ENDIF
+                            	   540:     
+00:000002C6 41FA063D        	   541:     lea     msgNoSdCardRead,A0
+00:000002CA 7201            	   542:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
+00:000002CC 4E4E            	   543:     trap    #14                         
+00:000002CE 7001            	   544:     moveq.l #1,D0                                       ; signal error
+                            	   545: 
+00:000002D0 23FCFFFFFFFF0000	   546:     move.l  #-1,lastFATSector
+00:000002D8 08AE
+00:000002DA 243C000000FF    	   547:     move.l  #$ff,D2
+00:000002E0 45BC0001        	   548:     chk     #1,D2                                       ; cause a trap to stop execution
+00:000002E4 4E75            	   549:     rts                                                 ; should not get here .. 
+                            	   550: 
+                            	   551: .noDiskReadError:
+                            	   552:     debugPrintSector 'R'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -650,30 +679,39 @@ Source: "bios.asm"
                             	    20M         trap    #15
                             	    21M 
                             	    22M         moveq.l #6,D0
-                            	    23M         move.b  #' ',D1                                     
+                            	    23M         move.b  #'-',D1                                     
                             	    24M         trap    #15
                             	    25M 
-                            	    26M         movem.l (A7)+,D0-D3/A0-A3
-                            	    27M     ENDIF
-                            	   535:     ;jmp    .noCachePrint
-                            	   536: 
-                            	   537: .noDiskReadRequired:
-                            	   538:     ;debugPrintSector 'C'
-                            	   539:     
-                            	   540: .noCachePrint:
-00:0000031C 41FA03AA        	   541:     lea    sdBuf,A0
-00:00000320 D1C3            	   542:     add.l  D3,A0                                        ; add offset into 512b buffer
-00:00000322 4E75            	   543:     rts
-                            	   544: 
-                            	   545: WRITE:
-                            	   546: ; Write one cpm sector from requested disk, track, sector to dma address
-                            	   547: ; Can be a cpmimage on the sd card or the ram disk
-00:00000324 4A39000003DC    	   548:     cmp.b   #0,SELDRV
-00:0000032A 664C            	   549:     bne     .writeRAMDrive
-                            	   550: 
-                            	   551:     ; going to write to disk
-00:0000032C 618E            	   552:     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentiall
-                            	   553:     debugPrintSector 'W'
+                            	    26M         moveq.l #15,D0
+                            	    27M         move.l  (DMA),D1                          ; sector in hex
+                            	    28M         move.b  #16,D2
+                            	    29M         trap    #15
+                            	    30M 
+                            	    31M         moveq.l #6,D0
+                            	    32M         move.b  #' ',D1                                     
+                            	    33M         trap    #15
+                            	    34M 
+                            	    35M         movem.l (A7)+,D0-D3/A0-A3
+                            	    36M     ENDIF
+                            	   553:     ;jmp    .noCachePrint
+                            	   554: 
+                            	   555: .noDiskReadRequired:
+                            	   556:     ;debugPrintSector 'C'
+                            	   557:     
+                            	   558: .noCachePrint:
+00:000002E6 41FA0374        	   559:     lea    sdBuf,A0
+00:000002EA D1C3            	   560:     add.l  D3,A0                                        ; add offset into 512b buffer
+00:000002EC 4E75            	   561:     rts
+                            	   562: 
+                            	   563: WRITE:
+                            	   564: ; Write one cpm sector from requested disk, track, sector to dma address
+                            	   565: ; Can be a cpmimage on the sd card or the ram disk
+00:000002EE 4A3900000370    	   566:     cmp.b   #0,SELDRV
+00:000002F4 6632            	   567:     bne     .writeRAMDrive
+                            	   568: 
+                            	   569:     ; going to write to disk    
+00:000002F6 6190            	   570:     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentiall
+                            	   571:     debugPrintSector 'W'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -696,45 +734,49 @@ Source: "bios.asm"
                             	    20M         trap    #15
                             	    21M 
                             	    22M         moveq.l #6,D0
-                            	    23M         move.b  #' ',D1                                     
+                            	    23M         move.b  #'-',D1                                     
                             	    24M         trap    #15
                             	    25M 
-                            	    26M         movem.l (A7)+,D0-D3/A0-A3
-                            	    27M     ENDIF
-00:0000032E 227A00B2        	   554:     move.l  DMA,A1
-00:00000332 C149            	   555:     exg     A0,A1
-                            	   556:     copyData
-00:00000334 4CD83CFF        	     1M     movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-00:00000338 48D13CFF        	     2M     movem.l D0-D7/A2-A5,(A1)
-00:0000033C 43E90030        	     3M     adda.w  #48,A1                                      ; 12 * 4
-00:00000340 4CD83CFF        	     4M     movem.l (A0)+,D0-D7/A2-A5                               
-00:00000344 48D13CFF        	     5M     movem.l D0-D7/A2-A5,(A1)
-00:00000348 43E90030        	     6M     adda.w  #48,A1
-00:0000034C 4CD800FF        	     7M     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-00:00000350 48D100FF        	     8M     movem.l D0-D7,(A1)
-                            	   557: 
-                            	   558:     ; and write out the 512b buffer to disk
-00:00000354 223A05C4        	   559:     move.l  (lastFATSector),D1                          ; set up in SETUPRD
-00:00000358 43FA056E        	   560:     lea     sd,A1
-00:0000035C 7003            	   561:     moveq.l #3,D0                                       ; write sector function call
-00:0000035E 45FA0368        	   562:     lea     sdBuf,A2
-00:00000362 4E4D            	   563:     trap    #13
-00:00000364 4A80            	   564:     cmp.l   #0,D0                                       ; check return
-00:00000366 660C            	   565:     bne     .noWriteError
-00:00000368 41FA0625        	   566:     lea     msgNoSdCardWrite,A0
-00:0000036C 7201            	   567:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
-00:0000036E 4E4E            	   568:     trap    #14                                         ; TRAP to firmware    
-00:00000370 7001            	   569:     moveq.l #1,D0                                       ; signal error
-00:00000372 4E75            	   570:     rts
-                            	   571:     
-                            	   572: .noWriteError:
-                            	   573:     ;move.l #-1,lastFATSector
-00:00000374 7000            	   574:     moveq.l #0,D0                                       ; return success
-00:00000376 4E75            	   575:     rts                    
-                            	   576: 
-                            	   577: .writeRAMDrive:
-00:00000378 6100FF22        	   578:     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
-                            	   579:     debugPrintRAM 'W'
+                            	    26M         moveq.l #15,D0
+                            	    27M         move.l  (DMA),D1                          ; sector in hex
+                            	    28M         move.b  #16,D2
+                            	    29M         trap    #15
+                            	    30M 
+                            	    31M         moveq.l #6,D0
+                            	    32M         move.b  #' ',D1                                     
+                            	    33M         trap    #15
+                            	    34M 
+                            	    35M         movem.l (A7)+,D0-D3/A0-A3
+                            	    36M     ENDIF
+00:000002F8 227A007C        	   572:     move.l  DMA,A1
+00:000002FC 701F            	   573:     move.l  #(128/4-1),d0  
+                            	   574:     
+                            	   575: .MOVE_LOOP3:
+00:000002FE 20D9            	   576:     MOVE.L  (A1)+,(A0)+                                 ; copy long word from source to dest, reverse direction from re
+00:00000300 51C8FFFC        	   577:     dbra    D0,.MOVE_LOOP3
+                            	   578: 
+                            	   579:     ; and write out the 512b buffer to disk
+00:00000304 223A05A8        	   580:     move.l  (lastFATSector),D1                          ; set up in SETUPRD
+00:00000308 43FA0552        	   581:     lea     sd,A1
+00:0000030C 7003            	   582:     moveq.l #3,D0                                       ; write sector function call
+00:0000030E 45FA034C        	   583:     lea     sdBuf,A2                                    ; write out sdBuf to disk
+00:00000312 4E4D            	   584:     trap    #13
+00:00000314 4A80            	   585:     cmp.l   #0,D0                                       ; check return
+00:00000316 660C            	   586:     bne     .noWriteError
+00:00000318 41FA0609        	   587:     lea     msgNoSdCardWrite,A0
+00:0000031C 7201            	   588:     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error me
+00:0000031E 4E4E            	   589:     trap    #14                                         ; TRAP to firmware    
+00:00000320 7001            	   590:     moveq.l #1,D0                                       ; signal error
+00:00000322 4E75            	   591:     rts
+                            	   592:     
+                            	   593: .noWriteError:
+                            	   594:     ;move.l #-1,lastFATSector
+00:00000324 7000            	   595:     moveq.l #0,D0                                       ; return success
+00:00000326 4E75            	   596:     rts                    
+                            	   597: 
+                            	   598: .writeRAMDrive:
+00:00000328 6100FF3E        	   599:     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
+                            	   600:     debugPrintRAM 'W'
                             	     1M     IFNE DEBUG
                             	     2M         movem.l D0-D3/A0-A3,-(A7)
                             	     3M 
@@ -750,335 +792,342 @@ Source: "bios.asm"
                             	    13M         trap    #15
                             	    14M 
                             	    15M         moveq.l #6,D0
-                            	    16M         move.b  #' ',D1                                     
+                            	    16M         move.b  #'-',D1                                     
                             	    17M         trap    #15
                             	    18M 
-                            	    19M         movem.l (A7)+,D0-D3/A0-A3
-                            	    20M     ENDIF
-00:0000037C 227A0064        	   580:     move.l  DMA,A1
-00:00000380 C149            	   581:     exg     A0,A1
-                            	   582:     copyData
-00:00000382 4CD83CFF        	     1M     movem.l (A0)+,D0-D7/A2-A5                           ; 12 long words
-00:00000386 48D13CFF        	     2M     movem.l D0-D7/A2-A5,(A1)
-00:0000038A 43E90030        	     3M     adda.w  #48,A1                                      ; 12 * 4
-00:0000038E 4CD83CFF        	     4M     movem.l (A0)+,D0-D7/A2-A5                               
-00:00000392 48D13CFF        	     5M     movem.l D0-D7/A2-A5,(A1)
-00:00000396 43E90030        	     6M     adda.w  #48,A1
-00:0000039A 4CD800FF        	     7M     movem.l (A0)+,D0-D7                                 ; 8 long words, so 12+12+8=32
-00:0000039E 48D100FF        	     8M     movem.l D0-D7,(A1)
-00:000003A2 7000            	   583:     moveq.l #0,D0
-00:000003A4 4E75            	   584:     rts        
-                            	   585: 
-                            	   586: FLUSH:
-00:000003A6 7000            	   587:     moveq.l #0,D0                                       ; return successful
-00:000003A8 4E75            	   588:     rts
-                            	   589: 
-                            	   590: GETSEG:
-00:000003AA 203C000003E8    	   591:     move.l #MEMRGN,D0                                   ; return address of mem region table
-00:000003B0 4E75            	   592:     rts
-                            	   593: 
-                            	   594: SETEXC:
-00:000003B2 0281000000FF    	   595:     andi.l  #$ff,D1                                     ; do only for exceptions 0 - 255
-                            	   596: 
-00:000003B8 0C41002D        	   597:     cmpi    #45,D1
-00:000003BC 671A            	   598:     beq     NOSET                                       ; don't set trap 13,14,15 as used by rosco firmware
-00:000003BE 0C41002E        	   599:     cmpi    #46,D1
-00:000003C2 6714            	   600:     beq     NOSET                        
-00:000003C4 0C41002F        	   601:     cmpi    #47,D1
-00:000003C8 670E            	   602:     beq     NOSET                       
-00:000003CA 0C410009        	   603:     cmpi    #9,D1                                       ; don't set trace trap
-00:000003CE 6708            	   604:     beq     NOSET
-00:000003D0 E549            	   605:     lsl     #2,D1                                       ; multiply exception number by 4
-00:000003D2 2041            	   606:     movea.l D1,A0
-00:000003D4 2010            	   607:     move.l  (A0),D0                                     ; return old vector value
-00:000003D6 2082            	   608:     move.l  D2,(A0)                                     ; insert new vector
-                            	   609: 
-                            	   610: NOSET:    
-00:000003D8 4E75            	   611:     rts
-                            	   612: 
-                            	   613: * ************************************************************************** *
-                            	   614: ; Data
-                            	   615: * ************************************************************************** *
-                            	   616: 
-                            	   617:               align 2                    ; DMA must be at even address
-00:000003DC FF              	   618: SELDRV        dc.b        $ff            ; drive requested by seldsk
-00:000003DD 00              	   619: RESV          dc.b        0              ; reserve byte, padding
-00:000003DE 0000            	   620: TRACK         dc.w        0              ; track requested by settrk
-00:000003E0 0000            	   621: SECTOR        dc.w        0              ; max sector value is 0x3FF
-00:000003E2 00000000        	   622: DMA           dc.l        0
-00:000003E6 00              	   623: SELCODE       dc.b        0              ; reserve byte
-00:000003E7 00              	   624: RESV1         dc.b        0              ; reserve byte, padding
-                            	   625: 
-                            	   626: ; memory table must start on an even address
-                            	   627:               align 2
-00:000003E8 0001            	   628: MEMRGN        dc.w        1              ; 1 memory region
-00:000003EA 00020000        	   629:               dc.l        $20000         ; after the CP/M 
-00:000003EE 000A0000        	   630: 			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
-                            	   631: 
-                            	   632: ; disk parameter header - 4mb disk on sd card
-                            	   633: DPH0:    
-00:000003F2 00000000        	   634:     dc.l      0                          ; no sector translation table
-00:000003F6 0000            	   635:     dc.w      0                          ; dummy
-00:000003F8 0000            	   636:     dc.w      0
-00:000003FA 0000            	   637:     dc.w      0
-00:000003FC 00000448        	   638:     dc.l      DIRBUF                     ; ptr to directory buffer
-00:00000400 0000040C        	   639:     dc.l      DPB0                       ; ptr to disk parameter block
-00:00000404 00000000        	   640:     dc.l      0                          ; permanent drive, no check vector
-00:00000408 000004C8        	   641:     dc.l      ALV0                       ; ptr to allocation vector
-                            	   642: 
-                            	   643: DPB0:    
-00:0000040C 0020            	   644:     dc.w     32                          ; 32 sectors per track
-00:0000040E 04              	   645:     dc.b     4                           ; block shift for BLS of 2048
-00:0000040F 0F              	   646:     dc.b     15                          ; block mask for BLS of 2048
-00:00000410 00              	   647:     dc.b     0                           ; extent mask, EXM
-00:00000411 00              	   648:     dc.b     0                           ; dummy fill
-00:00000412 07FF            	   649:     dc.w     2047                        ; DSM, (1024 tracks * 32 sectors * 128 bytes /2048)-1
-                            	   650:                            
-00:00000414 00FF            	   651:     dc.w     255                         ; DRM, 256 directory entries
-00:00000416 0000            	   652:     dc.w     0                           ; directory mask
-00:00000418 0000            	   653:     dc.w     0                           ; permanent mounted drive, check size is zero
-00:0000041A 0000            	   654:     dc.w     0                           ; no track offset
-                            	   655: 
+                            	    19M         moveq.l #15,D0
+                            	    20M         move.l  (DMA),D1                          ; sector in hex
+                            	    21M         move.b  #16,D2
+                            	    22M         trap    #15
+                            	    23M 
+                            	    24M         moveq.l #6,D0
+                            	    25M         move.b  #' ',D1                                     
+                            	    26M         trap    #15
+                            	    27M 
+                            	    28M         movem.l (A7)+,D0-D3/A0-A3
+                            	    29M     ENDIF
+00:0000032C 227A0048        	   601:     move.l  DMA,A1
+00:00000330 701F            	   602:     move.l  #(128/4-1),d0  
+                            	   603: 
+                            	   604: .MOVE_LOOP4:
+00:00000332 20D9            	   605:     MOVE.L  (A1)+,(A0)+                                 ; copy long word from source to dest, reverse direction from re
+00:00000334 51C8FFFC        	   606:     dbra    D0,.MOVE_LOOP4
+                            	   607: 
+00:00000338 7000            	   608:     moveq.l #0,D0
+00:0000033A 4E75            	   609:     rts        
+                            	   610: 
+                            	   611: FLUSH:
+00:0000033C 7000            	   612:     moveq.l #0,D0                                       ; return successful
+00:0000033E 4E75            	   613:     rts
+                            	   614: 
+                            	   615: GETSEG:
+00:00000340 203C0000037C    	   616:     move.l #MEMRGN,D0                                   ; return address of mem region table
+00:00000346 4E75            	   617:     rts
+                            	   618: 
+                            	   619: SETEXC:
+00:00000348 0281000000FF    	   620:     andi.l  #$ff,D1                                     ; do only for exceptions 0 - 255
+                            	   621: 
+00:0000034E 0C41002D        	   622:     cmpi    #45,D1
+00:00000352 671A            	   623:     beq     NOSET                                       ; don't set trap 13,14,15 as used by rosco firmware
+00:00000354 0C41002E        	   624:     cmpi    #46,D1
+00:00000358 6714            	   625:     beq     NOSET                        
+00:0000035A 0C41002F        	   626:     cmpi    #47,D1
+00:0000035E 670E            	   627:     beq     NOSET                       
+00:00000360 0C410009        	   628:     cmpi    #9,D1                                       ; don't set trace trap
+00:00000364 6708            	   629:     beq     NOSET
+00:00000366 E549            	   630:     lsl     #2,D1                                       ; multiply exception number by 4
+00:00000368 2041            	   631:     movea.l D1,A0
+00:0000036A 2010            	   632:     move.l  (A0),D0                                     ; return old vector value
+00:0000036C 2082            	   633:     move.l  D2,(A0)                                     ; insert new vector
+                            	   634: 
+                            	   635: NOSET:    
+00:0000036E 4E75            	   636:     rts
+                            	   637: 
+                            	   638: * ************************************************************************** *
+                            	   639: ; Data
+                            	   640: * ************************************************************************** *
+                            	   641: 
+                            	   642:               align 2                    ; DMA must be at even address
+00:00000370 FF              	   643: SELDRV        dc.b        $ff            ; drive requested by seldsk
+00:00000371 00              	   644: RESV          dc.b        0              ; reserve byte, padding
+00:00000372 0000            	   645: TRACK         dc.w        0              ; track requested by settrk
+00:00000374 0000            	   646: SECTOR        dc.w        0              ; max sector value is 0x3FF
+00:00000376 00000000        	   647: DMA           dc.l        0
+00:0000037A 00              	   648: SELCODE       dc.b        0              ; reserve byte
+00:0000037B 00              	   649: RESV1         dc.b        0              ; reserve byte, padding
+                            	   650: 
+                            	   651: ; memory table must start on an even address
+                            	   652:               align 2
+00:0000037C 0001            	   653: MEMRGN        dc.w        1              ; 1 memory region
+00:0000037E 00020000        	   654:               dc.l        $20000         ; after the CP/M 
+00:00000382 000A0000        	   655: 			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
                             	   656: 
-                            	   657: ; disk parameter header - 128k ram disk 
-                            	   658: DPH1:    
-00:0000041C 00000000        	   659:     dc.l      0                          ; no sector translation table
-00:00000420 0000            	   660:     dc.w      0                          ; dummy
-00:00000422 0000            	   661:     dc.w      0
-00:00000424 0000            	   662:     dc.w      0
-00:00000426 00000448        	   663:     dc.l      DIRBUF                     ; ptr to directory buffer
-00:0000042A 00000436        	   664:     dc.l      DPB1                       ; ptr to disk parameter block
-00:0000042E 00000000        	   665:     dc.l      0                          ; permanent drive, no check vector
-00:00000432 000005C8        	   666:     dc.l      ALV1                       ; ptr to allocation vector
+                            	   657: ; disk parameter header - 4mb disk on sd card
+                            	   658: DPH0:    
+00:00000386 00000000        	   659:     dc.l      0                          ; no sector translation table
+00:0000038A 0000            	   660:     dc.w      0                          ; dummy
+00:0000038C 0000            	   661:     dc.w      0
+00:0000038E 0000            	   662:     dc.w      0
+00:00000390 000003DC        	   663:     dc.l      DIRBUF                     ; ptr to directory buffer
+00:00000394 000003A0        	   664:     dc.l      DPB0                       ; ptr to disk parameter block
+00:00000398 00000000        	   665:     dc.l      0                          ; permanent drive, no check vector
+00:0000039C 0000045C        	   666:     dc.l      ALV0                       ; ptr to allocation vector
                             	   667: 
-                            	   668: DPB1:    
-00:00000436 0020            	   669:     dc.w     32                          ; 32 sectors per track
-00:00000438 04              	   670:     dc.b     4                           ; block shift for BLS of 2048
-00:00000439 0F              	   671:     dc.b     15                          ; block mask for BLS of 2048
-00:0000043A 00              	   672:     dc.b     0                           ; extent mask, EXM
-00:0000043B 00              	   673:     dc.b     0                           ; dummy fill
-00:0000043C 003F            	   674:     dc.w     63                          ; DSM, (32 tracks * 32 sectors * 128 bytes /2048)-1
+                            	   668: DPB0:    
+00:000003A0 0020            	   669:     dc.w     32                          ; 32 sectors per track
+00:000003A2 04              	   670:     dc.b     4                           ; block shift for BLS of 2048
+00:000003A3 0F              	   671:     dc.b     15                          ; block mask for BLS of 2048
+00:000003A4 00              	   672:     dc.b     0                           ; extent mask, EXM
+00:000003A5 00              	   673:     dc.b     0                           ; dummy fill
+00:000003A6 07FF            	   674:     dc.w     2047                        ; DSM, (1024 tracks * 32 sectors * 128 bytes /2048)-1
                             	   675:                            
-00:0000043E 00FF            	   676:     dc.w     255                         ; DRM, 256 directory entries
-00:00000440 0000            	   677:     dc.w     0                           ; directory mask
-00:00000442 0000            	   678:     dc.w     0                           ; permanent mounted drive, check size is zero
-00:00000444 0000            	   679:     dc.w     0                           ; no track offset
+00:000003A8 00FF            	   676:     dc.w     255                         ; DRM, 256 directory entries
+00:000003AA 0000            	   677:     dc.w     0                           ; directory mask
+00:000003AC 0000            	   678:     dc.w     0                           ; permanent mounted drive, check size is zero
+00:000003AE 0000            	   679:     dc.w     0                           ; no track offset
                             	   680: 
                             	   681: 
-                            	   682:     align 2
-                            	   683: DIRBUF:    
-00:00000448 00              	   684:     ds.b     128                         ; directory buffer
-00:00000449 *
-                            	   685: 
-                            	   686: ALV0:    
-00:000004C8 00              	   687: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
-00:000004C9 *
-                            	   688: 
-                            	   689: ALV1:    
-00:000005C8 00              	   690: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
-00:000005C9 *
-                            	   691: 
-                            	   692: sdBuf:    
-00:000006C8 00              	   693: 	ds.b     512                         ; buffer to read/write sectors to sd card
-00:000006C9 *
-                            	   694: 
-                            	   695: sd:
-00:000008C8 00              	   696:     ds.b     64                          ; needs to be large enough to hold a sd card structure
-00:000008C9 *
-                            	   697: 
-                            	   698: partStartSector:                         ; starting sector for partition 0 on the disk
-00:00000908 00000000        	   699:     dc.l     0
-                            	   700: 
-                            	   701: rootDirectoryCluster:                    ; cluster of root directory - usually 2
-00:0000090C 00000000        	   702:     dc.l     0
-                            	   703: 
-                            	   704: rootDirectorySector:                     ; sector where root directory starts on sd card
-00:00000910 0000            	   705:     dc.w     0
+                            	   682: ; disk parameter header - 128k ram disk 
+                            	   683: DPH1:    
+00:000003B0 00000000        	   684:     dc.l      0                          ; no sector translation table
+00:000003B4 0000            	   685:     dc.w      0                          ; dummy
+00:000003B6 0000            	   686:     dc.w      0
+00:000003B8 0000            	   687:     dc.w      0
+00:000003BA 000003DC        	   688:     dc.l      DIRBUF                     ; ptr to directory buffer
+00:000003BE 000003CA        	   689:     dc.l      DPB1                       ; ptr to disk parameter block
+00:000003C2 00000000        	   690:     dc.l      0                          ; permanent drive, no check vector
+00:000003C6 0000055C        	   691:     dc.l      ALV1                       ; ptr to allocation vector
+                            	   692: 
+                            	   693: DPB1:    
+00:000003CA 0020            	   694:     dc.w     32                          ; 32 sectors per track
+00:000003CC 04              	   695:     dc.b     4                           ; block shift for BLS of 2048
+00:000003CD 0F              	   696:     dc.b     15                          ; block mask for BLS of 2048
+00:000003CE 00              	   697:     dc.b     0                           ; extent mask, EXM
+00:000003CF 00              	   698:     dc.b     0                           ; dummy fill
+00:000003D0 003F            	   699:     dc.w     63                          ; DSM, (32 tracks * 32 sectors * 128 bytes /2048)-1
+                            	   700:                            
+00:000003D2 00FF            	   701:     dc.w     255                         ; DRM, 256 directory entries
+00:000003D4 0000            	   702:     dc.w     0                           ; directory mask
+00:000003D6 0000            	   703:     dc.w     0                           ; permanent mounted drive, check size is zero
+00:000003D8 0000            	   704:     dc.w     0                           ; no track offset
+                            	   705: 
                             	   706: 
-                            	   707: reservedSectors:                         ; sector where FAT table starts on sd card
-00:00000912 0000            	   708:     dc.w     0
-                            	   709: 
-                            	   710: sectorsPerCluster:                       ; sectors per cluster in word format
-00:00000914 0000            	   711:     dc.w     0
-                            	   712: 
-                            	   713: CPMImageSector:                          ; sector number of CPM image
-00:00000916 00000000        	   714:     dc.l     0
-                            	   715: 
-                            	   716: lastFATSector:                           ; last FAT sector read (contents should be in sdBuf)
-00:0000091A FFFFFFFF        	   717:     dc.l     -1
-                            	   718: 
-                            	   719: imageName:
-00:0000091E 43504D4449534B20	   720:     dc.b     "CPMDISK IMG",0             ; Nameof CPM image file on SD card
-00:00000926 494D47
-00:00000929 00
-                            	   721: 
-                            	   722: msgNoSdCardSupport:
-00:0000092A 6572726F723A204E	   723:     dc.b     "error: No SD card support detected",0
-00:00000932 6F20534420636172
-00:0000093A 6420737570706F72
-00:00000942 7420646574656374
-00:0000094A 6564
-00:0000094C 00
-                            	   724: 
-                            	   725: msgNoSdCardInit:
-00:0000094D 6572726F723A2055	   726:     dc.b     "error: Unable to initialize SD card",0
-00:00000955 6E61626C6520746F
-00:0000095D 20696E697469616C
-00:00000965 697A652053442063
-00:0000096D 617264
-00:00000970 00
-                            	   727: 
-                            	   728: msgNoSdCardRead:
-00:00000971 6572726F723A2055	   729:     dc.b     "error: Unable to read SD card",0
-00:00000979 6E61626C6520746F
-00:00000981 2072656164205344
-00:00000989 2063617264
-00:0000098E 00
-                            	   730: 
-                            	   731: msgNoSdCardWrite:
-00:0000098F 6572726F723A2055	   732:     dc.b     "error: Unable to write SD card",0
-00:00000997 6E61626C6520746F
-00:0000099F 2077726974652053
-00:000009A7 442063617264
-00:000009AD 00
-                            	   733: 
-                            	   734: msgNoCPMImage:
-00:000009AE 6572726F723A2043	   735:     dc.b     "error: Cannot find CPMDISK.IMG in root directory of partition 0 on SD card",0
-00:000009B6 616E6E6F74206669
-00:000009BE 6E642043504D4449
-00:000009C6 534B2E494D472069
-00:000009CE 6E20726F6F742064
-00:000009D6 69726563746F7279
-00:000009DE 206F662070617274
-00:000009E6 6974696F6E203020
-00:000009EE 6F6E205344206361
-00:000009F6 7264
-00:000009F8 00
-                            	   736: 
+                            	   707:     align 2
+                            	   708: DIRBUF:    
+00:000003DC 00              	   709:     ds.b     128                         ; directory buffer
+00:000003DD *
+                            	   710: 
+                            	   711: ALV0:    
+00:0000045C 00              	   712: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+00:0000045D *
+                            	   713: 
+                            	   714: ALV1:    
+00:0000055C 00              	   715: 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+00:0000055D *
+                            	   716: 
+                            	   717: sdBuf:    
+00:0000065C 00              	   718: 	ds.b     512                         ; buffer to read/write sectors to sd card
+00:0000065D *
+                            	   719: 
+                            	   720: sd:
+00:0000085C 00              	   721:     ds.b     64                          ; needs to be large enough to hold a sd card structure
+00:0000085D *
+                            	   722: 
+                            	   723: partStartSector:                         ; starting sector for partition 0 on the disk
+00:0000089C 00000000        	   724:     dc.l     0
+                            	   725: 
+                            	   726: rootDirectoryCluster:                    ; cluster of root directory - usually 2
+00:000008A0 00000000        	   727:     dc.l     0
+                            	   728: 
+                            	   729: rootDirectorySector:                     ; sector where root directory starts on sd card
+00:000008A4 0000            	   730:     dc.w     0
+                            	   731: 
+                            	   732: reservedSectors:                         ; sector where FAT table starts on sd card
+00:000008A6 0000            	   733:     dc.w     0
+                            	   734: 
+                            	   735: sectorsPerCluster:                       ; sectors per cluster in word format
+00:000008A8 0000            	   736:     dc.w     0
+                            	   737: 
+                            	   738: CPMImageSector:                          ; sector number of CPM image
+00:000008AA 00000000        	   739:     dc.l     0
+                            	   740: 
+                            	   741: lastFATSector:                           ; last FAT sector read (contents should be in sdBuf)
+00:000008AE FFFFFFFF        	   742:     dc.l     -1
+                            	   743: 
+                            	   744: imageName:
+00:000008B2 43504D4449534B20	   745:     dc.b     "CPMDISK IMG",0             ; Nameof CPM image file on SD card
+00:000008BA 494D47
+00:000008BD 00
+                            	   746: 
+                            	   747: msgNoSdCardSupport:
+00:000008BE 6572726F723A204E	   748:     dc.b     "error: No SD card support detected",0
+00:000008C6 6F20534420636172
+00:000008CE 6420737570706F72
+00:000008D6 7420646574656374
+00:000008DE 6564
+00:000008E0 00
+                            	   749: 
+                            	   750: msgNoSdCardInit:
+00:000008E1 6572726F723A2055	   751:     dc.b     "error: Unable to initialize SD card",0
+00:000008E9 6E61626C6520746F
+00:000008F1 20696E697469616C
+00:000008F9 697A652053442063
+00:00000901 617264
+00:00000904 00
+                            	   752: 
+                            	   753: msgNoSdCardRead:
+00:00000905 6572726F723A2055	   754:     dc.b     "error: Unable to read SD card",0
+00:0000090D 6E61626C6520746F
+00:00000915 2072656164205344
+00:0000091D 2063617264
+00:00000922 00
+                            	   755: 
+                            	   756: msgNoSdCardWrite:
+00:00000923 6572726F723A2055	   757:     dc.b     "error: Unable to write SD card",0
+00:0000092B 6E61626C6520746F
+00:00000933 2077726974652053
+00:0000093B 442063617264
+00:00000941 00
+                            	   758: 
+                            	   759: msgNoCPMImage:
+00:00000942 6572726F723A2043	   760:     dc.b     "error: Cannot find CPMDISK.IMG in root directory of partition 0 on SD card",0
+00:0000094A 616E6E6F74206669
+00:00000952 6E642043504D4449
+00:0000095A 534B2E494D472069
+00:00000962 6E20726F6F742064
+00:0000096A 69726563746F7279
+00:00000972 206F662070617274
+00:0000097A 6974696F6E203020
+00:00000982 6F6E205344206361
+00:0000098A 7264
+00:0000098C 00
+                            	   761: 
 
 
 Symbols by name:
-ALV0                            00:000004C8
-ALV1                            00:000005C8
-BIOSBASE                        00:0000016E
-CONIN                           00:000001DA
-CONOUT                          00:000001E8
-CONSTAT                         00:000001D0
-CPMImageSector                  00:00000916
+ALV0                            00:0000045C
+ALV1                            00:0000055C
+BIOSBASE                        00:00000168
+CONIN                           00:000001D4
+CONOUT                          00:000001E2
+CONSTAT                         00:000001CA
+CPMImageSector                  00:000008AA
 DEBUG                            S:00000000
-DIRBUF                          00:00000448
-DMA                             00:000003E2
-DPB0                            00:0000040C
-DPB1                            00:00000436
-DPH0                            00:000003F2
-DPH1                            00:0000041C
-FLUSH                           00:000003A6
-GETIOB                          00:000001EE
-GETSEG                          00:000003AA
-HOME                            00:000001F8
-LISTST                          00:000001F2
-LSTOUT                          00:000001EE
-MEMRGN                          00:000003E8
-NOSET                           00:000003D8
-PUN                             00:000001EE
-RDR                             00:000001EE
-READ                            00:00000240
-RESV                            00:000003DD
-RESV1                           00:000003E7
-SECTOR                          00:000003E0
-SECTRAN                         00:00000234
-SELCODE                         00:000003E6
-SELDRV                          00:000003DC
-SELDSK                          00:00000200
-SETDMA                          00:00000238
-SETEXC                          00:000003B2
-SETIOB                          00:000001EE
-SETSEC                          00:0000022C
-SETTRK                          00:00000224
-TRACK                           00:000003DE
-TRAPHNDL                        00:0000015E
-TRAPNG                          00:0000016C
-WBOOT                           00:000001CA
-WRITE                           00:00000324
+DIRBUF                          00:000003DC
+DMA                             00:00000376
+DPB0                            00:000003A0
+DPB1                            00:000003CA
+DPH0                            00:00000386
+DPH1                            00:000003B0
+FLUSH                           00:0000033C
+GETIOB                          00:000001E8
+GETSEG                          00:00000340
+HOME                            00:000001F2
+LISTST                          00:000001EC
+LSTOUT                          00:000001E8
+MEMRGN                          00:0000037C
+NOSET                           00:0000036E
+PUN                             00:000001E8
+RDR                             00:000001E8
+READ                            00:0000023C
+RESV                            00:00000371
+RESV1                           00:0000037B
+SECTOR                          00:00000374
+SECTRAN                         00:0000022E
+SELCODE                         00:0000037A
+SELDRV                          00:00000370
+SELDSK                          00:000001FA
+SETDMA                          00:00000232
+SETDMA2                         00:0000023A
+SETEXC                          00:00000348
+SETIOB                          00:000001E8
+SETSEC                          00:00000226
+SETTRK                          00:0000021E
+TRACK                           00:00000372
+TRAPHNDL                        00:00000158
+TRAPNG                          00:00000166
+WBOOT                           00:000001C4
+WRITE                           00:000002EE
 _ccp                             E:000150BC
 _init                           00:00000000 EXP
-imageName                       00:0000091E
-lastFATSector                   00:0000091A
-msgNoCPMImage                   00:000009AE
-msgNoSdCardInit                 00:0000094D
-msgNoSdCardRead                 00:00000971
-msgNoSdCardSupport              00:0000092A
-msgNoSdCardWrite                00:0000098F
-partStartSector                 00:00000908
+imageName                       00:000008B2
+lastFATSector                   00:000008AE
+msgNoCPMImage                   00:00000942
+msgNoSdCardInit                 00:000008E1
+msgNoSdCardRead                 00:00000905
+msgNoSdCardSupport              00:000008BE
+msgNoSdCardWrite                00:00000923
+partStartSector                 00:0000089C
 ramDriveLocation                 E:000C0000
-reservedSectors                 00:00000912
-rootDirectoryCluster            00:0000090C
-rootDirectorySector             00:00000910
-sd                              00:000008C8
-sdBuf                           00:000006C8
-sectorsPerCluster               00:00000914
-setupReadDisk                   00:000002BC
-setupReadRAM                    00:0000029C
+reservedSectors                 00:000008A6
+rootDirectoryCluster            00:000008A0
+rootDirectorySector             00:000008A4
+sd                              00:0000085C
+sdBuf                           00:0000065C
+sectorsPerCluster               00:000008A8
+setupReadDisk                   00:00000288
+setupReadRAM                    00:00000268
 
 Symbols by value:
 00000000 _init
 00000000 DEBUG
-0000015E TRAPHNDL
-0000016C TRAPNG
-0000016E BIOSBASE
-000001CA WBOOT
-000001D0 CONSTAT
-000001DA CONIN
-000001E8 CONOUT
-000001EE LSTOUT
-000001EE SETIOB
-000001EE RDR
-000001EE PUN
-000001EE GETIOB
-000001F2 LISTST
-000001F8 HOME
-00000200 SELDSK
-00000224 SETTRK
-0000022C SETSEC
-00000234 SECTRAN
-00000238 SETDMA
-00000240 READ
-0000029C setupReadRAM
-000002BC setupReadDisk
-00000324 WRITE
-000003A6 FLUSH
-000003AA GETSEG
-000003B2 SETEXC
-000003D8 NOSET
-000003DC SELDRV
-000003DD RESV
-000003DE TRACK
-000003E0 SECTOR
-000003E2 DMA
-000003E6 SELCODE
-000003E7 RESV1
-000003E8 MEMRGN
-000003F2 DPH0
-0000040C DPB0
-0000041C DPH1
-00000436 DPB1
-00000448 DIRBUF
-000004C8 ALV0
-000005C8 ALV1
-000006C8 sdBuf
-000008C8 sd
-00000908 partStartSector
-0000090C rootDirectoryCluster
-00000910 rootDirectorySector
-00000912 reservedSectors
-00000914 sectorsPerCluster
-00000916 CPMImageSector
-0000091A lastFATSector
-0000091E imageName
-0000092A msgNoSdCardSupport
-0000094D msgNoSdCardInit
-00000971 msgNoSdCardRead
-0000098F msgNoSdCardWrite
-000009AE msgNoCPMImage
+00000158 TRAPHNDL
+00000166 TRAPNG
+00000168 BIOSBASE
+000001C4 WBOOT
+000001CA CONSTAT
+000001D4 CONIN
+000001E2 CONOUT
+000001E8 SETIOB
+000001E8 RDR
+000001E8 PUN
+000001E8 LSTOUT
+000001E8 GETIOB
+000001EC LISTST
+000001F2 HOME
+000001FA SELDSK
+0000021E SETTRK
+00000226 SETSEC
+0000022E SECTRAN
+00000232 SETDMA
+0000023A SETDMA2
+0000023C READ
+00000268 setupReadRAM
+00000288 setupReadDisk
+000002EE WRITE
+0000033C FLUSH
+00000340 GETSEG
+00000348 SETEXC
+0000036E NOSET
+00000370 SELDRV
+00000371 RESV
+00000372 TRACK
+00000374 SECTOR
+00000376 DMA
+0000037A SELCODE
+0000037B RESV1
+0000037C MEMRGN
+00000386 DPH0
+000003A0 DPB0
+000003B0 DPH1
+000003CA DPB1
+000003DC DIRBUF
+0000045C ALV0
+0000055C ALV1
+0000065C sdBuf
+0000085C sd
+0000089C partStartSector
+000008A0 rootDirectoryCluster
+000008A4 rootDirectorySector
+000008A6 reservedSectors
+000008A8 sectorsPerCluster
+000008AA CPMImageSector
+000008AE lastFATSector
+000008B2 imageName
+000008BE msgNoSdCardSupport
+000008E1 msgNoSdCardInit
+00000905 msgNoSdCardRead
+00000923 msgNoSdCardWrite
+00000942 msgNoCPMImage
 000150BC _ccp
 000C0000 ramDriveLocation
