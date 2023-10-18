@@ -61,4 +61,4 @@ bios_end:
 ;disk_start:         incbin "../cpmfs/target/disk1.img" 
 ;disk_end:      
 
-strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.3", 0
+strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.4", 0

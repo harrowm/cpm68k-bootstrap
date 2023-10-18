@@ -284,15 +284,14 @@ _init::
     LEA     imageName,A4
     cmp.l   (A4)+,(A5)+
     bne     .nextDir
-    debugPrintChar '1'
+    
     cmp.l   (A4)+,(A5)+
     bne     .nextDir
-    debugPrintChar '2'
+    
     move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
     clr.b   D6
     cmp.l   (A4),D6
     bne     .nextDir
-    debugPrintChar '3'
 
     ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
     ;        block = entry[20,21] << 16 + entry[26,27]
@@ -371,7 +370,7 @@ CONSTAT:
     moveq.l #0,D0
     move.b  D1,D0
     rts
-         
+
 CONIN:    
 ; Read single ASCII character from the keyboard into d0
 ; Rosco implementation of this trap waits for input
@@ -445,7 +444,7 @@ READ:
 
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
     move.l  DMA,A1
-    move.l  #(128/4-1),d0  
+    move.l  #(128/4-1),D0  
 
 .MOVE_LOOP1:
     MOVE.L  (A0)+,(A1)+                                 ; copy long word from source to dest
