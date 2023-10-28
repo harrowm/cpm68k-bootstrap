@@ -25,6 +25,7 @@ echo ""
 
 echo "Formatting $DEF image -> $IMAGE"
 mkfs.cpm -f 4mb-hd-0 $IMAGE
+truncate -s 4M $IMAGE
 #dd if=/dev/zero bs=$DISK_SIZE count=1 | tr '\0' '\345' > $IMAGE
 
 echo "Definition: ${DEF}" > $LABEL

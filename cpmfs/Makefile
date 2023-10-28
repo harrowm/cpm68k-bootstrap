@@ -34,7 +34,7 @@ $(DIR_TARGET)/disk1.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	
 # A full copy of CPM disk 1, confusingly on disk2.img
-$(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+$(DIR_TARGET)/disk2XX.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice.txt
@@ -80,9 +80,9 @@ $(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 #	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd
 	
 # 1 partition with full CP/M distribution copied to partition 0
-#$(DIR_TARGET)/drive_d.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1
-#	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd
-#	$(SHELL) $(CMDS)/copyAll.sh $@ 0 10 $(CPM_1_3_SRC)
+$(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1
+	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd-0
+	$(SHELL) $(CMDS)/copyAll.sh $@ 0 10 $(CPM_1_3_SRC)
 	
 $(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr
 	cat $(DIR_TARGET)/cpm15000.sr | sed -n '/\x1a/q;p' | grep -v "^S9" | srec_cat $(BIOS_FILE) - -header "$(BOOT_HEADER)" -execution-start-address=$(BOOT_START_ADDR) > $@

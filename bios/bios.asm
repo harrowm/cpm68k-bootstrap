@@ -3,7 +3,7 @@
 
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
-DEBUG              set 1                                ; set to 1 to print debug messgae, 0 turns off  
+DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off  
 
 ; pass in a character to this routine and print it out
 ; use to track progress through the code in debug ..
@@ -40,15 +40,6 @@ debugPrintSector MACRO
 
         moveq.l #15,D0
         move.l  D3,D1                                       ; offset on sector in hex
-        move.b  #16,D2
-        trap    #15
-
-        moveq.l #6,D0
-        move.b  #'-',D1                                     
-        trap    #15
-
-        moveq.l #15,D0
-        move.l  (DMA),D1                          ; sector in hex
         move.b  #16,D2
         trap    #15
 
@@ -352,7 +343,7 @@ BIOSBASE:
     dc.l    WRITE
     dc.l    LISTST
     dc.l    SECTRAN
-    dc.l    SETDMA2
+    dc.l    MISSING
     dc.l    GETSEG
     dc.l    GETIOB
     dc.l    SETIOB
@@ -432,8 +423,9 @@ SETDMA:
     move.l  D1,DMA
     rts
 
-SETDMA2:
-    debugPrintChar '*'
+MISSING:
+    ; this number is missing from the table in the
+    ; CPM 68k documentation, doesn't seem to be ever called
     rts
 
 READ:
