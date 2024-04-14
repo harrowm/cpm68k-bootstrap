@@ -32,20 +32,11 @@ kmain::
                     ; We choose to load at 0xC0000 and make it 128k in size .. 0x20000
                     ; A blank CPM disk is full of 0xE5 characters
 
-                    ;move.l   #$E5E5E5E5,A0
                     lea.l    $C0000,A1
                     move.l   #($20000/4)-1,D0
 .MOVE_LOOP3:
                     move.l   #$E5E5E5E5,(A1)+
                     dbra     D0,.MOVE_LOOP3
-
-                    ; load up a predefined CPM disk image to 0xC0000
-                    ;LEA.L   disk_start,A0                  ; start of srec file
-                    ;LEA.L   $C0000,A1                      ; absolute dest addr (*** disk file limited to 0x15000-0x2000 = ~77k)
-                    ;MOVE.L  #(disk_end-disk_start)/4-1,d0  ; length
-;.MOVE_LOOP3:
-                    ;MOVE.L  (A0)+,(A1)+                    ; copy long word from source to dest
-                    ;DBRA    D0,.MOVE_LOOP3                 ; loop until end of srec
 
                     ; and jump to it to start CPM !
                     JMP     $15000                                      
@@ -57,8 +48,5 @@ srec_end:
                     align 4
 bios_start:         incbin "../bios/target/bios.sr.bin" 
 bios_end:      
-;                    align 4
-;disk_start:         incbin "../cpmfs/target/disk1.img" 
-;disk_end:      
 
-strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.4", 0
+strBootMsg:         dc.b   "CPM-68k loader for rosco_m68k v0.5", 0

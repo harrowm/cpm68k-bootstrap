@@ -259,9 +259,7 @@ _init::
     movea.l D5,A5
     move.b  (A5),D6
     tst.b   D6                                          ; reached end of root directory entries
-    bne     .notDirEnd
-    lea     msgNoCPMImage,A0
-    jmp     .errExit
+    beq     .dirEnd
 
 .notDirEnd:
     move.b  $b(A5),D6
@@ -271,47 +269,147 @@ _init::
     beq     .nextDir                                    ; skip long filename entries
 
     ; check to see if we have found the CPM Image file
-    ; The name CPMDISK.IMG is stored as "CPMDISK " then "IMG" in FAT32
+    ; Check that name starts "CPMD"
     LEA     imageName,A4
     cmp.l   (A4)+,(A5)+
     bne     .nextDir
-    
-    cmp.l   (A4)+,(A5)+
-    bne     .nextDir
-    
+
+    ; Check that the name ends in "IMG*"    
+    addq    #4,A4
+    addq    #4,A5
     move.l  (A5),D6                                      ; wipe last byte from FAT to compare to 0 from imageName
     clr.b   D6
     cmp.l   (A4),D6
     bne     .nextDir
 
+    ; Now look at the middle "ISK*"
+    ; The * can be a space or A..P
+    subq    #4,A4
+    subq    #4,A5
+
+    move.l  (A4),D5                                      ; save last characters
+    move.l  (A5)+,D6                                     ; increment A5 so that its aligned for below                                      
+    move.b  D6,D5                                        ; make last byte the same
+    cmp.l   D5,D6                                        ; Check that "ISK" is the same
+    bne     .nextDir
+
+    and.l   #$FF,D6                                      ; clear top 3 bytes
+    ; Now left to check last character
+    cmp.b   #' ',D6                                      ; CMPDISK.IMG found
+    beq     .foundCMPDISK
+
+.checkdriveletter
+    sub.b   #'A',D6
+    bmi     .notvaliddrive
+    cmp.b   #15,D6
+    ble     .validdrive
+ 
+.notvaliddrive
+    ; MESSAGE IGNOREING
+    bne     .nextDir
+
+.foundCMPDISK
+    ; change D6 to 16 (one past end of CPMDRIVE table) and fall through
+    move.b  #16,D6
+   
+.validdrive
     ; found file, A5 will now be pointing at entry[8] so adjust offsets to compensate
     ;        block = entry[20,21] << 16 + entry[26,27]
     ; get starting block of CPMDISK.IMG
-    move.w  $c(A5),D6                                   
-    rol.w   #8,D6
-    swap    D6
-    move.w  $12(A5),D6
-    rol.w   #8,D6
+    move.w  $c(A5),D5                                   
+    rol.w   #8,D5
+    swap    D5
+    move.w  $12(A5),D5
+    rol.w   #8,D5
 
-    sub.l   (rootDirectoryCluster),D6                   ; allow for the position of the root directory (usually 2)
-    mulu.w  (sectorsPerCluster),D6  
+    sub.l   (rootDirectoryCluster),D5                   ; allow for the position of the root directory (usually 2)
+    mulu.w  (sectorsPerCluster),D5  
 
     ; for efficiency we will point CPMImageSector at the actual block on the sd card
-    add.w  (rootDirectorySector),D6
-    move.l D6,CPMImageSector
+    add.w   (rootDirectorySector),D5
 
-    move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
-    moveq.l #0,D0                                       ; log on disk A, user 0
-    rts
+    move.b  D6,D2                                       ; Save for printing drive later
+
+    lea     CPMDISK,A0
+    add.b   D6,D6
+    add.b   D6,D6
+    add.l   D6,A0
+    move.l  D5,(A0)
+
+    ; Print out a message about the mapping (if not CPMDISK.IMG, this printed later after other drives assigned)
+    ; HACK sort this out msgMapDriveSource
+
+    cmp.b   #16,D2                                      ; Skip over CPMDISK.IMG 
+    beq     .nextDir
+
+    move.b  #'A',D1                                      
+    add.b   D2,D1
+    move.b  D1,msgMapDriveLetter
+    move.b  D1,msgMapDriveSource
+    lea     msgMapDrive,A0
+    moveq   #1,D1
+    trap    #14 
 
 .nextDir:
     addq.l  #1,D4                                       ; look at next directory entry
-    jmp     .startDirectoryEntry
+    bra     .startDirectoryEntry
 
 .errExit:
     moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
     trap    #14                          
     moveq.l #1,D0                                       ; signal error
+    rts
+
+
+    ; So now we have read the whole directory and need to do some tidy up:
+    ;   if we have found "CPMDISK.IMG" then we need to place this in the table if possible 
+    ;   we need to try to place the RAMDISK in the mapping table
+    ; Why have CPMDISK.IMG ? TO me most people will only want one disk .. and this is the best name :o
+
+.dirEnd
+    lea     CPMDISK,A1
+    move.l  (CPMDISK+64),D1                             ; "CPMDISK.IMG" sector if found stored at 17th entry in table
+    moveq   #15,D3                                      ; looping variable, 16=max number of drives, -1 for dbra
+.nextdiskmap
+    tst.l   (A1)
+    bne     .continue                                   ; not an empty slot, try to loop around
+
+    tst.b   D1                                          ; see if we need to map CPMDISK.IMG
+    beq     .sortoutramdrive
+    move.l  D1,(A1)
+
+    ; format drive letter for message
+    move.b  #'A'+15,D1                                      
+    sub.b   D3,D1
+    move.b  D1,msgMapCPMDriveLetter
+    lea     msgMapCPMDrive,A0
+    moveq   #1,D1
+    trap    #14 
+
+    moveq   #0,D1                                       ; note that CPMDISK.IMG now mapped
+    
+.continue
+    addq    #4,A1    
+    dbra    D3,.nextdiskmap
+
+    ; Need to check is we failed to map CPMDRIVE.IMG and RAMDRIVE and message
+    bra     .finish
+
+.sortoutramdrive
+    moveq   #15,D1                                      ; reuse D1
+    sub.b   D3,D1
+    move.b  D1,RAMDRIVE                                 ; now that we fix up RAMDRIVE we are done, so can fall out of loop
+
+    ; message RAM drive mapping
+    add.b   #'A',D1
+    move.b  D1,msgMapRAMDriveLetter
+    lea     msgMapRAMDrive,A0
+    moveq   #1,D1
+    trap    #14 
+
+.finish
+    move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
+    moveq.l #0,D0                                       ; log on disk A, user 0
     rts
 
 TRAPHNDL:
@@ -395,15 +493,38 @@ HOME:
 
 SELDSK:    
 ; drive should be in d1.b
-    cmp.b   #1,D1
-    beq     .seldrive1     
-    move.b  #0,SELDRV
-    move.l  #DPH0,D0
+; now trashes A0
+    cmp.b   (RAMDRIVE),D1
+    beq     .selram
+
+    cmp.b   #15,D1                  ; 16 max drives for cpm68k
+    bgt     .seldsk_error           ; .. return without changing anything
+
+    moveq   #0,D0
+    move.b  D1,D0                   ; save for later
+
+    add.b   D1,D1                   ; Multiply D1 by 4 to change to address
+    add.b   D1,D1
+    lea     CPMDISK,A0
+    move.l  (0,A0,D1.L),D1            ; move sector for the requested disk to D1
+    
+    beq     .seldsk_error           ; zero so no disk mapped to this slot
+
+    move.l  D1,(CPMImageSector)     ; set up FAT32 sector for disk image for read/write routine
+                                    
+    move.b  D0,SELDRV               ; set up selected drive
+    mulu    #26,D0                  ; 26 is the size of the DPH 
+    lea     DPH0,A0
+    add.l   A0,D0                   ; return D0 pointing to the right DPH
     rts
 
-.seldrive1
-    move.b  #1,SELDRV
+.selram
+    move.b  D1,SELDRV
     move.l  #DPH1,D0
+    rts
+    
+.seldsk_error
+    moveq   #0,D0                   ; Signal error
     rts
 
 SETTRK:    
@@ -431,8 +552,11 @@ MISSING:
 READ:
 ; Read one cpm sector from requested disk, track, sector to dma address
 ; Can be a cpmimage on the sd card or the ram disk
-    cmp.b   #0,SELDRV
-    bne     .readRAMDrive
+    ;cmp.b   #0,SELDRV
+    ;bne     .readRAMDrive
+    move.b  (RAMDRIVE),D0
+    cmp.b   SELDRV,D0
+    beq     .readRAMDrive
 
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
     move.l  DMA,A1
@@ -554,8 +678,12 @@ setupReadDisk:
 WRITE:
 ; Write one cpm sector from requested disk, track, sector to dma address
 ; Can be a cpmimage on the sd card or the ram disk
-    cmp.b   #0,SELDRV
-    bne     .writeRAMDrive
+    ;cmp.b   #0,SELDRV
+    ;bne     .writeRAMDrive
+    move.b  (RAMDRIVE),D0
+    cmp.b   SELDRV,D0
+    beq     .writeRAMDrive
+
 
     ; going to write to disk    
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
@@ -645,8 +773,18 @@ MEMRGN        dc.w        1              ; 1 memory region
               dc.l        $20000         ; after the CP/M 
 			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
 
+; Drive mapping; 0xFFFFFFFF means mapped to Ram disk, 0 not present otherwise records
+; the sector of the logical file on the FAT32 SD Card
+; Max of 16 disks 
+CPMDISK:
+    ds.l      17,0                       ; 16 drives plus one slot for "CPMDISK.IMG" which gets mapped to one of the other 16
+RAMDRIVE:
+    dc.b      0                          ; mappimg for RAM disk
+    dc.b      0                          ; padding
+
 ; disk parameter header - 4mb disk on sd card
-DPH0:    
+; set this up for 16 disks .. DPB and DIRBUF can be reused, ALV cannot ..
+DPH0:  
     dc.l      0                          ; no sector translation table
     dc.w      0                          ; dummy
     dc.w      0
@@ -655,6 +793,142 @@ DPH0:
     dc.l      DPB0                       ; ptr to disk parameter block
     dc.l      0                          ; permanent drive, no check vector
     dc.l      ALV0                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV1                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV2                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV3                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV4                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV5                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV6                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV7                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV8                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV9                       ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV10                      ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV11                      ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV12                      ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV13                      ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV14                      ; ptr to allocation vector
+
+    dc.l      0                          ; no sector translation table
+    dc.w      0                          ; dummy
+    dc.w      0
+    dc.w      0
+    dc.l      DIRBUF                     ; ptr to directory buffer
+    dc.l      DPB0                       ; ptr to disk parameter block
+    dc.l      0                          ; permanent drive, no check vector
+    dc.l      ALV15                      ; ptr to allocation vector
+
 
 DPB0:    
     dc.w     32                          ; 32 sectors per track
@@ -679,7 +953,7 @@ DPH1:
     dc.l      DIRBUF                     ; ptr to directory buffer
     dc.l      DPB1                       ; ptr to disk parameter block
     dc.l      0                          ; permanent drive, no check vector
-    dc.l      ALV1                       ; ptr to allocation vector
+    dc.l      ALV16                      ; ptr to allocation vector
 
 DPB1:    
     dc.w     32                          ; 32 sectors per track
@@ -705,6 +979,51 @@ ALV0:
 ALV1:    
 	ds.b     256                         ; allocation vector, DSM/8+1 = 128
 
+ALV2:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV3:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV4:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV5:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV6:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV7:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV8:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV9:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV10:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV11:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV12:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV13:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV14:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV15:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
+ALV16:    
+	ds.b     256                         ; allocation vector, DSM/8+1 = 128
+
 sdBuf:    
 	ds.b     512                         ; buffer to read/write sectors to sd card
 
@@ -726,7 +1045,7 @@ reservedSectors:                         ; sector where FAT table starts on sd c
 sectorsPerCluster:                       ; sectors per cluster in word format
     dc.w     0
 
-CPMImageSector:                          ; sector number of CPM image
+CPMImageSector:                          ; sector number of CPM image for the current disk
     dc.l     0
 
 lastFATSector:                           ; last FAT sector read (contents should be in sdBuf)
@@ -749,3 +1068,17 @@ msgNoSdCardWrite:
 
 msgNoCPMImage:
     dc.b     "error: Cannot find CPMDISK.IMG in root directory of partition 0 on SD card",0
+msgMapCPMDrive:
+    dc.b     "Mapped CPMDISK.IMG to "
+msgMapCPMDriveLetter:
+    dc.b     "Q:",0
+msgMapRAMDrive:
+    dc.b     "Mapped RAM drive to "
+msgMapRAMDriveLetter:
+    dc.b     "Q:",0
+msgMapDrive:
+    dc.b     "Mapped CPMDISK"
+msgMapDriveSource:
+    dc.b     "Q.IMG to "
+msgMapDriveLetter:
+    dc.b     "Q:",0

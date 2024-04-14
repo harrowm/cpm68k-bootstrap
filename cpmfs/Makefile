@@ -5,6 +5,13 @@ CPM_1_2_SRC		:= cpm_1_2
 CPM_1_2_ZIP     := 68kv1_2.zip
 CPM_1_3_SRC		:= cpm_1_3
 CPM_1_3_ZIP     := 68kv1_3.zip
+
+FORTH_SRC		:= forth
+FORTH_ZIP     	:= forth68k.zip
+
+BASIC_SRC		:= basic
+BASIC_ZIP     	:= cb68.zip
+
 CMDS			:= ./cmds
 BIOS_DIR        := ../bios
 BIOS_TARGET     := $(BIOS_DIR)/target
@@ -23,24 +30,40 @@ RM    			:= rm
 SHELL 			:= /bin/bash
 
 #all: $(DIR_TARGET)/disk1.img $(DIR_TARGET)/disk10.img $(DIR_TARGET)/diskBase.img $(DIR_TARGET)/diskAll.img $(DIR_TARGET)/drive_a.img $(DIR_TARGET)/drive_b.img $(DIR_TARGET)/drive_c.img $(DIR_TARGET)/drive_d.img
-all: $(DIR_TARGET)/disk1.img $(DIR_TARGET)/disk2.img 
+all: $(DIR_TARGET)/cpmdisk.img $(DIR_TARGET)/cpmdiska.img $(DIR_TARGET)/cpmdiskb.img $(DIR_TARGET)/cpmdiskf.img 
 
 clean:
 	$(RM) -rf $(DIR_TARGET)/*
 
 # A very small disk suitable for RAM disk with a couple of test files
-$(DIR_TARGET)/disk1.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+$(DIR_TARGET)/cpmdisk.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	
-# A full copy of CPM disk 1, confusingly on disk2.img
-$(DIR_TARGET)/disk2XX.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+# A full copy of CPM disk 1, along with a couple of test text files
+$(DIR_TARGET)/cpmdiska.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice.txt
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice120.txt
-#	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 sherlock.txt # large testing file
-	
+
+# Basic
+# which is here http://www.cpm.z80.de/download/cb68.zip
+$(DIR_TARGET)/cpmdiskb.img: $(DIR_TARGET) $(BASIC_SRC)/cb68 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.DOC
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.L68
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.REL
+
+# Forth
+# which is here http://www.cpm.z80.de/download/forth68k.zip
+$(DIR_TARGET)/cpmdiskf.img: $(DIR_TARGET) $(FORTH_SRC) $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.BLK
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.68K
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.FIX
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.TXT
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.WS
 
 #$(DIR_TARGET)/disk10.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 #	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 10
@@ -80,9 +103,9 @@ $(DIR_TARGET)/disk2XX.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 #	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd
 	
 # 1 partition with full CP/M distribution copied to partition 0
-$(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1
-	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd-0
-	$(SHELL) $(CMDS)/copyAll.sh $@ 0 10 $(CPM_1_3_SRC)
+# $(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1
+# 	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd-0
+# 	$(SHELL) $(CMDS)/copyAll.sh $@ 0 10 $(CPM_1_3_SRC)
 	
 $(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr
 	cat $(DIR_TARGET)/cpm15000.sr | sed -n '/\x1a/q;p' | grep -v "^S9" | srec_cat $(BIOS_FILE) - -header "$(BOOT_HEADER)" -execution-start-address=$(BOOT_START_ADDR) > $@
@@ -91,7 +114,6 @@ $(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr
 
 $(DIR_TARGET)/cpm15000.sr: $(CPM_1_3_SRC)/DISK8/CPM15000.SR
 	cp $(CPM_1_3_SRC)/DISK8/CPM15000.SR $(DIR_TARGET)/cpm15000.sr
-#	cat $< | sed -e 's/S12304606000/S12304606200/' | sed -e 's/00010000F5/00010000F3/' > $@
 		
 $(CPM_1_2_SRC)/DISK3: $(CPM_1_2_SRC)/$(CPM_1_2_ZIP)
 	cd $(CPM_1_2_SRC); unzip -q -o $(CPM_1_2_ZIP)
@@ -117,4 +139,33 @@ $(CPM_1_3_SRC):
 	
 $(DIR_TARGET):
 	mkdir -p $@
-	
+
+# Forth
+# which is here http://www.cpm.z80.de/download/forth68k.zip
+
+$(FORTH_SRC)/$(FORTH_ZIP): | $(FORTH_SRC)
+	rm -rf $(FORTH_SRC)/*
+	wget -O $(FORTH_SRC)/$(FORTH_ZIP) http://cpm.z80.de/download/$(FORTH_ZIP) 
+	touch $(FORTH_SRC)/$(FORTH_ZIP)
+
+$(FORTH_SRC)/forth68k: $(FORTH_SRC)/$(FORTH_ZIP)
+	cd $(FORTH_SRC); unzip -q -o $(FORTH_ZIP)
+
+$(FORTH_SRC):
+	mkdir -p $@
+
+# BASIC
+# which is here http://www.cpm.z80.de/download/cb68.zip
+
+$(BASIC_SRC)/$(BASIC_ZIP): | $(BASIC_SRC)
+	rm -rf $(BASIC_SRC)/*
+	wget -O $(BASIC_SRC)/$(BASIC_ZIP) http://cpm.z80.de/download/$(BASIC_ZIP) 
+	touch $(BASIC_SRC)/$(BASIC_ZIP)
+
+$(BASIC_SRC)/cb68: $(BASIC_SRC)/$(BASIC_ZIP)
+	cd $(BASIC_SRC); unzip -q -o $(BASIC_ZIP)
+
+$(BASIC_SRC):
+	mkdir -p $@
+
+
