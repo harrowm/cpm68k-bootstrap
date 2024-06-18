@@ -4,11 +4,13 @@
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
 DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off  
+DEBUG1             set 1                                ; set to 1 to print debug messgae, 0 turns off  
+
 
 ; pass in a character to this routine and print it out
 ; use to track progress through the code in debug ..
 debugPrintChar MACRO
-    IFNE DEBUG
+    IFNE DEBUG1
         movem.l D0-D3/A0-A3,-(A7)
 
         moveq.l #6,D0                                   
@@ -84,6 +86,15 @@ debugPrintRAM MACRO
 
         movem.l (A7)+,D0-D3/A0-A3
     ENDIF
+ENDM
+
+; print the number in D1 in hex
+debugPrintNum MACRO
+        movem.l D0-D3/A0-A3,-(A7)
+        moveq.l #15,D0
+        move.b  #16,D2
+        trap    #15
+        movem.l (A7)+,D0-D3/A0-A3
 ENDM
 
 _init::    
@@ -494,6 +505,10 @@ HOME:
 SELDSK:    
 ; drive should be in d1.b
 ; now trashes A0
+
+    ; as spotted by jjlov, D1 can come in dirty, so clean
+    and.l   #15,D1
+
     cmp.b   (RAMDRIVE),D1
     beq     .selram
 

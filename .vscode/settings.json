@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "VT52.C": "cpp"
+        "VT52.C": "cpp",
+        "XFER86.C": "cpp",
+        "TERM.C": "cpp"
     }
 }
