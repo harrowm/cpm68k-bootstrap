@@ -97,6 +97,16 @@ debugPrintNum MACRO
         movem.l (A7)+,D0-D3/A0-A3
 ENDM
 
+; print a string using trap 14 whilst preseving register A0
+PrintStr MACRO
+    movem.l D1/A0,-(A7)
+    lea     \1,A0
+    moveq.l #1,D1                                       
+    trap    #14  
+    movem.l (A7)+,D1/A0
+ENDM
+
+
 _init::    
     ; at this stage, we have loaded from the SDCARD, so we know its valid, no need to re-init
     ; need to find the starting sector of the CPM disk image on the sd card.
@@ -117,8 +127,9 @@ _init::
     trap    #13
     cmp.l   #$1234FEDC,D0                               ; check magic return
     beq     .haveSDsupport
-    lea     msgNoSdCardSupport,A0
-    jmp     .errExit
+    PrintStr msgNoSdCardSupport
+    moveq.l #1,D0                                       ; signal error
+    rts
     
 .haveSDsupport:
     ; init the sd card and get sd card structure back
@@ -127,8 +138,9 @@ _init::
     trap    #13
     cmp.l   #0,D0                                       ; check return
     beq     .haveSDinit
-    lea     msgNoSdCardInit,A0
-    jmp     .errExit
+    PrintStr msgNoSdCardInit
+    moveq.l #1,D0                                       ; signal error
+    rts
 
 .haveSDinit:
     ; read the MBR from sector 0 on the disk so we can read the partition table
@@ -139,8 +151,9 @@ _init::
     trap    #13
     cmp.l   #0,D0                                       ; check return
     bne     .haveReadDiskMBR
-    lea     msgNoSdCardRead,A0
-    jmp     .errExit
+    PrintStr msgNoSdCardRead
+    moveq.l #1,D0                                       ; signal error
+    rts
 
 .haveReadDiskMBR:
     ; now we need to check the disk MBR for a partition table and get the offset to the first partition
@@ -163,11 +176,11 @@ _init::
     trap    #13
     cmp.l   #0,D0                                       ; check return
     bne     .haveReadPartMBR
-    lea     msgNoSdCardRead,A0
-    jmp     .errExit
+    PrintStr msgNoSdCardRead
+    moveq.l #1,D0                                       ; signal error
+    rts
 
 .haveReadPartMBR
-
     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endianess of 68000
     rol.w   #8,D6
     move.w  D6,reservedSectors
@@ -256,8 +269,10 @@ _init::
     trap    #13
     cmp.l   #0,D0                                       ; check return
     bne     .noReadError
-    lea     msgNoSdCardRead,A0
-    jmp     .errExit
+    
+    PrintStr msgNoSdCardRead
+    moveq.l #1,D0                                       ; signal error
+    rts
 
 .noReadError:
     addq.l  #1,D3                                       ; increment next sector to read
@@ -357,20 +372,12 @@ _init::
     add.b   D2,D1
     move.b  D1,msgMapDriveLetter
     move.b  D1,msgMapDriveSource
-    lea     msgMapDrive,A0
-    moveq   #1,D1
-    trap    #14 
+
+    PrintStr msgMapDrive
 
 .nextDir:
     addq.l  #1,D4                                       ; look at next directory entry
     bra     .startDirectoryEntry
-
-.errExit:
-    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
-    trap    #14                          
-    moveq.l #1,D0                                       ; signal error
-    rts
-
 
     ; So now we have read the whole directory and need to do some tidy up:
     ;   if we have found "CPMDISK.IMG" then we need to place this in the table if possible 
@@ -393,10 +400,8 @@ _init::
     move.b  #'A'+15,D1                                      
     sub.b   D3,D1
     move.b  D1,msgMapCPMDriveLetter
-    lea     msgMapCPMDrive,A0
-    moveq   #1,D1
-    trap    #14 
 
+    PrintStr msgMapCPMDrive
     moveq   #0,D1                                       ; note that CPMDISK.IMG now mapped
     
 .continue
@@ -414,9 +419,7 @@ _init::
     ; message RAM drive mapping
     add.b   #'A',D1
     move.b  D1,msgMapRAMDriveLetter
-    lea     msgMapRAMDrive,A0
-    moveq   #1,D1
-    trap    #14 
+    PrintStr msgMapRAMDrive
 
 .finish
     move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
@@ -666,11 +669,9 @@ setupReadDisk:
     bne     .noDiskReadError
 
     ; if we get here we had a disk read error
-    debugPrintSector 'E'
-    
-    lea     msgNoSdCardRead,A0
-    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
-    trap    #14                         
+    debugPrintSector 'E'    
+    PrintStr msgNoSdCardRead
+
     moveq.l #1,D0                                       ; signal error
 
     move.l  #-1,lastFATSector
@@ -718,9 +719,8 @@ WRITE:
     trap    #13
     cmp.l   #0,D0                                       ; check return
     bne     .noWriteError
-    lea     msgNoSdCardWrite,A0
-    moveq.l #1,D1                                       ; Func code is 1 PRINTLN, A0 preloaded with address of error message
-    trap    #14                                         ; TRAP to firmware    
+
+    PrintStr msgNoSdCardWrite
     moveq.l #1,D0                                       ; signal error
     rts
     
