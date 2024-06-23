@@ -88,22 +88,25 @@ debugPrintRAM MACRO
     ENDIF
 ENDM
 
-; print the number in D1 in hex
+; print the number at address \1 in hex
 debugPrintNum MACRO
         movem.l D0-D3/A0-A3,-(A7)
         moveq.l #15,D0
+        move.l  (\1),D1
         move.b  #16,D2
         trap    #15
         movem.l (A7)+,D0-D3/A0-A3
 ENDM
 
-; print a string using trap 14 whilst preseving register A0
+; Macros to call traps and save any registers that are changed
+
+; print a string using trap 14,1 whilst preseving register A0
 PrintStr MACRO
-    movem.l D1/A0,-(A7)
+    movem.l D0-D3/A0-A3,-(A7)
     lea     \1,A0
     moveq.l #1,D1                                       
     trap    #14  
-    movem.l (A7)+,D1/A0
+    movem.l (A7)+,D0-D3/A0-A3
 ENDM
 
 
@@ -123,39 +126,33 @@ _init::
     ;   - The root directory is arranged 32 bytes per entry.  We will assume our CPM disk image is in the root and called cpmdisk.img.  So 16 entries in a 512 byte sector
     
     ; check sd card support
+    movem.l D0-D3/A0-A3,-(A7)
     moveq.l #0,D0
     trap    #13
     cmp.l   #$1234FEDC,D0                               ; check magic return
-    beq     .haveSDsupport
-    PrintStr msgNoSdCardSupport
-    moveq.l #1,D0                                       ; signal error
-    rts
-    
-.haveSDsupport:
+    bne     .errNoSDsupport
+    movem.l (A7)+,D0-D3/A0-A3
+
     ; init the sd card and get sd card structure back
+    movem.l D0-D3/A0-A3,-(A7)
     lea     sd,A1
     moveq.l #1,D0                                       
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    beq     .haveSDinit
-    PrintStr msgNoSdCardInit
-    moveq.l #1,D0                                       ; signal error
-    rts
+    bne     .errNoSDinit
+    movem.l (A7)+,D0-D3/A0-A3
 
-.haveSDinit:
     ; read the MBR from sector 0 on the disk so we can read the partition table
+    movem.l D0-D3/A0-A3,-(A7)
     lea     sd,A1
     moveq.l #2,D0                                       ; read the MBR from the sd card 
     moveq.l #0,D1                                       ; sector number to read
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .haveReadDiskMBR
-    PrintStr msgNoSdCardRead
-    moveq.l #1,D0                                       ; signal error
-    rts
+    beq     .errNoReadDiskMBR
+    movem.l (A7)+,D0-D3/A0-A3
 
-.haveReadDiskMBR:
     ; now we need to check the disk MBR for a partition table and get the offset to the first partition
     ; this is a bodge .. CPM has to be on the first partition, partiton 0 and 0x1BE on the disk MBR
     ; The code should really check all 4 partitions ..
@@ -169,18 +166,16 @@ _init::
     move.l  D6,partStartSector
 
     ; read the MBR from sector 0 of the partition so we can calculate position of the root diectory and hence the CPM image
+    movem.l D0-D3/A0-A3,-(A7)
     lea     sd,A1
     moveq.l #2,D0                                       ; read the MBR from the sd card 
     move.l  D6,D1                                       ; sector number to read - partStartSector
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .haveReadPartMBR
-    PrintStr msgNoSdCardRead
-    moveq.l #1,D0                                       ; signal error
-    rts
+    beq     .errNoReadPartMBR
+    movem.l (A7)+,D0-D3/A0-A3
 
-.haveReadPartMBR
     move.w  $e+sdBuf,D6                                 ; number of reserved sectors from MBR.  Reversed due to endianess of 68000
     rol.w   #8,D6
     move.w  D6,reservedSectors
@@ -263,6 +258,7 @@ _init::
     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
     lea     sd,A1
     moveq.l #2,D0                                       ; read sector trap
+    moveq.l #0,D1                                       ; required for r68k to work correctly
     move.w  rootDirectorySector,D1
     add.w   D3,D1                                       ; sector number to read plus offset to rootDirectoryCluster
     lea     sdBuf,A2
@@ -425,6 +421,33 @@ _init::
     move.l  #TRAPHNDL,$8c                               ; set up trap #3 handler
     moveq.l #0,D0                                       ; log on disk A, user 0
     rts
+
+; errors during _init 
+.errNoSDsupport
+    movem.l (A7)+,D0-D3/A0-A3
+    PrintStr msgNoSdCardSupport
+    moveq.l #1,D0                                       ; signal error
+    rts
+
+ .errNoSDinit:
+    movem.l (A7)+,D0-D3/A0-A3
+    PrintStr msgNoSdCardInit
+    moveq.l #1,D0                                       ; signal error
+    rts
+
+.errNoReadDiskMBR:
+    movem.l (A7)+,D0-D3/A0-A3
+    PrintStr msgNoSdCardReadMBR
+    moveq.l #1,D0                                       ; signal error
+    rts
+
+.errNoReadPartMBR:
+    movem.l (A7)+,D0-D3/A0-A3
+    PrintStr msgNoSdCardRead
+    moveq.l #1,D0                                       ; signal error
+    rts
+
+
 
 TRAPHNDL:
     cmpi    #23,D0                                      ; Function call in range ?
@@ -1074,6 +1097,9 @@ msgNoSdCardSupport:
 
 msgNoSdCardInit:
     dc.b     "error: Unable to initialize SD card",0
+
+msgNoSdCardReadMBR:
+    dc.b     "error: Unable to read SD card MBR",0
 
 msgNoSdCardRead:
     dc.b     "error: Unable to read SD card",0
