@@ -758,22 +758,23 @@ WRITE:
     dbra    D0,.MOVE_LOOP3
 
     ; and write out the 512b buffer to disk
+    ; tyhisi sthe last function for the CPM BIOS call, so we dont need to preserve the registers when we call the trap
     move.l  (lastFATSector),D1                          ; set up in SETUPRD
     lea     sd,A1
     moveq.l #3,D0                                       ; write sector function call
     lea     sdBuf,A2                                    ; write out sdBuf to disk
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .noWriteError
+    beq     .errWriteError
 
+    moveq.l #0,D0                                       ; return success
+    rts                    
+
+.errWriteError:
     PrintStr msgNoSdCardWrite
     moveq.l #1,D0                                       ; signal error
     rts
     
-.noWriteError:
-    moveq.l #0,D0                                       ; return success
-    rts                    
-
 .writeRAMDrive:
     bsr     setupReadRAM                                ; sets A0 to point to the right 128 bytes in memory to read
     debugPrintRAM 'W'
