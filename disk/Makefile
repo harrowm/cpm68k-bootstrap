@@ -1,5 +1,5 @@
 #target/rosco.img: ../boot/target/boot.bin | target
-	# Create a 64Mb FAT32 disk and copy in the files
+	# Create a 128Mb FAT32 disk and copy in the files
 	# brew install mtools
 
 #	cp ../boot/target/boot.bin files/roscode1.bin
@@ -17,24 +17,24 @@
 #	echo 'cd ~/mame && ./mame roscom68k -hard1 ../cpm68k-bootstrap/disk/target/rosco.img -log -oslog -debug'
 
 all:
-	cp ../boot/target/boot.bin ~/mame/disk/files
-	cp ../cpmfs/target/cpmdisk*.img ~/mame/disk/files/
+	#cp ../boot/target/boot.bin ~/mame/disk/files
+	#cp ../cpmfs/target/cpmdisk*.img ~/mame/disk/files/
 
 	cp ../boot/target/boot.bin ~/rosco_m68k/code/tools/r68k
 	cp ~/rosco_m68k/code/software/**/*.bin ../disk/files
 	cp ../cpmfs/target/cpmdisk* files
 
-	# Create a 64Mb FAT32 disk and copy in the files
+	# Create a 128Mb FAT32 disk and copy in the files
 	# brew install mtools
 	rm -f rosco_sd.bin
-	dd if=/dev/zero of=rosco_sd.bin  bs=1M count=64
+	dd if=/dev/zero of=rosco_sd.bin  bs=1M count=128
 	mformat -i rosco_sd.bin -F :: 
 	mcopy -i rosco_sd.bin files/* ::
 	mv rosco_sd.bin ~/rosco_m68k/code/tools/r68k
 
 	
 clean:
-	rm -rf target/* files/roscode1.bin
+	rm -rf target/* files/*
 
 obj:
 	mkdir -p $@

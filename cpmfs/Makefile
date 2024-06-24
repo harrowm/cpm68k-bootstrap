@@ -29,8 +29,22 @@ RM    			:= rm
 #SHELL 			:= sh
 SHELL 			:= /bin/bash
 
-#all: $(DIR_TARGET)/disk1.img $(DIR_TARGET)/disk10.img $(DIR_TARGET)/diskBase.img $(DIR_TARGET)/diskAll.img $(DIR_TARGET)/drive_a.img $(DIR_TARGET)/drive_b.img $(DIR_TARGET)/drive_c.img $(DIR_TARGET)/drive_d.img
-all: $(DIR_TARGET)/cpmdisk.img $(DIR_TARGET)/cpmdiska.img $(DIR_TARGET)/cpmdiskb.img $(DIR_TARGET)/cpmdiskf.img 
+all: $(DIR_TARGET)/cpmdisk.img \
+	$(DIR_TARGET)/cpmdiska.img \
+	$(DIR_TARGET)/cpmdiskb.img \
+	$(DIR_TARGET)/cpmdiskc.img \
+	$(DIR_TARGET)/cpmdiskd.img \
+	$(DIR_TARGET)/cpmdiske.img \
+	$(DIR_TARGET)/cpmdiskf.img \
+	$(DIR_TARGET)/cpmdiskg.img \
+	$(DIR_TARGET)/cpmdiskh.img \
+	$(DIR_TARGET)/cpmdiski.img \
+	$(DIR_TARGET)/cpmdiskj.img \
+	$(DIR_TARGET)/cpmdiskk.img \
+	$(DIR_TARGET)/cpmdiskl.img \
+	$(DIR_TARGET)/cpmdiskm.img \
+	$(DIR_TARGET)/cpmdiskq.img \
+	$(DIR_TARGET)/cpmdiskp.img 
 
 clean:
 	$(RM) -rf $(DIR_TARGET)/*
@@ -60,10 +74,84 @@ $(DIR_TARGET)/cpmdiskb.img: $(DIR_TARGET) $(BASIC_SRC)/cb68 $(BOOT_FILE)
 $(DIR_TARGET)/cpmdiskf.img: $(DIR_TARGET) $(FORTH_SRC) $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.BLK
-	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.68K
+	#$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.68K
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.FIX
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.TXT
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(FORTH_SRC)/*.WS
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 forth_fix/*
+
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskc.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskd.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiske.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskg.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskh.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiski.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskj.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskk.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskl.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskm.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskn.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdisko.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskp.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+# Create small disk images for every other possible disk for testing
+$(DIR_TARGET)/cpmdiskq.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	
+#-------
+
 
 #$(DIR_TARGET)/disk10.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 #	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 10

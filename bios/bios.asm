@@ -1,5 +1,6 @@
 ; Very simple cpm68k bios
-; Malcolm Harrow August 2023
+; Malcolm Harrow August 2023 to June 2024
+; Yes, it wasn't that simple ..
 
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
@@ -326,6 +327,7 @@ _init::
  
 .notvaliddrive
     ; MESSAGE IGNOREING
+    PrintStr msgIgnoreMapDrive
     bne     .nextDir
 
 .foundCMPDISK
@@ -672,7 +674,10 @@ setupReadDisk:
 ;
 ; calculate offset of CPM 128b required in 512b buffer
 ; copy the correct 12b across into the CPM dma area
-
+    
+    ; this routine returns the address of the 128 byte sector in the 512 FAT sector memory buffer in A0
+    movem.l D0-D4/A1-A3,-(A7)
+    
     ; start by calculating the requested (FAT32) sector number from TRACK and SECTOR in D0
     ; also calculate the offset into that 512b buffer for the 128b CPM sector data in D3
     moveq.l #0,D1
@@ -706,20 +711,8 @@ setupReadDisk:
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                        ; check return
-    bne     .noDiskReadError
+    beq     .errDiskReadError
 
-    ; if we get here we had a disk read error
-    debugPrintSector 'E'    
-    PrintStr msgNoSdCardRead
-
-    moveq.l #1,D0                                       ; signal error
-
-    move.l  #-1,lastFATSector
-    move.l  #$ff,D2
-    chk     #1,D2                                       ; cause a trap to stop execution
-    rts                                                 ; should not get here .. 
-
-.noDiskReadError:
     debugPrintSector 'R'
     ;jmp    .noCachePrint
 
@@ -729,7 +722,22 @@ setupReadDisk:
 .noCachePrint:
     lea    sdBuf,A0
     add.l  D3,A0                                        ; add offset into 512b buffer
+    movem.l (A7)+,D0-D4/A1-A3
     rts
+
+.errDiskReadError:
+    ; if we get here we had a disk read error
+    movem.l (A7)+,D0-D4/A1-A3
+
+    debugPrintSector 'E'    
+    PrintStr msgNoSdCardRead
+
+    moveq.l #1,D0                                       ; signal error
+
+    move.l  #-1,lastFATSector
+    move.l  #$ff,D2
+    chk     #1,D2                                       ; cause a trap to stop execution
+    rts                                                 ; should not get here .. 
 
 WRITE:
 ; Write one cpm sector from requested disk, track, sector to dma address
@@ -1138,6 +1146,5 @@ msgMapDriveSource:
     dc.b     "Q.IMG to "
 msgMapDriveLetter:
     dc.b     "Q:",0
-
-msgFLUSH:
-    dc.b     "FLUSHING DISK",0
+msgIgnoreMapDrive:
+    dc.b     "Ignoring CPMDISK file with drive letter after P",0
