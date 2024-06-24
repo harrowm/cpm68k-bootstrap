@@ -256,6 +256,7 @@ _init::
     bne     .noReadRequired                             ; we dont need to read a new sector from the sd card
 
     ; read the MBR from sector 0 so we can calculate position of the MBR and root diectory in the CPM image
+    movem.l D0-D3/A0-A3,-(A7)
     lea     sd,A1
     moveq.l #2,D0                                       ; read sector trap
     moveq.l #0,D1                                       ; required for r68k to work correctly
@@ -264,13 +265,10 @@ _init::
     lea     sdBuf,A2
     trap    #13
     cmp.l   #0,D0                                       ; check return
-    bne     .noReadError
-    
-    PrintStr msgNoSdCardRead
-    moveq.l #1,D0                                       ; signal error
-    rts
+    cmp.l   #0,D0                                       ; check return
+    beq     .errReadError
+    movem.l (A7)+,D0-D3/A0-A3
 
-.noReadError:
     addq.l  #1,D3                                       ; increment next sector to read
     moveq.l #0,D4                                       ; reset directory entry to zero 
 
@@ -447,6 +445,11 @@ _init::
     moveq.l #1,D0                                       ; signal error
     rts
 
+.errReadError:    
+    movem.l (A7)+,D0-D3/A0-A3
+    PrintStr msgNoSdCardRead
+    moveq.l #1,D0                                       ; signal error
+    rts
 
 
 TRAPHNDL:
@@ -491,30 +494,49 @@ WBOOT:
 
 CONSTAT: 
 ; Check for keyboard input. Set d0 to 1 if keyboard input is pending, otherwise set to 0.
+    movem.l D1,-(A7)
     moveq.l #7,D0                        ; use EASy68k trap 15 task 7
     trap    #15                          ; d1.b = 1 if keyboard ready, otherwise = 0
     moveq.l #0,D0
-    move.b  D1,D0
+
+    cmp.b   #1,D1
+    bne     .end_constat
+
+    move.b  #$FF,D0                      ; return 0xFF if keyboard ready according to CPM68k manual
+.end_constat:
+    movem.l (A7)+,D1
     rts
 
 CONIN:    
 ; Read single ASCII character from the keyboard into d0
-; Rosco implementation of this trap waits for input
+; Rosco implementation of this trap waits for input, which is what we need for CPM68k
+    movem.l D1-D7/A0-A6,-(A7)
     moveq.l #5,D0                        ; use EASy68k trap 15 task 5
     trap    #15                          ; d1.b contains the ascii character
     move.b  D1,D0      
     and.l   #$7f,D0                      ; only use 7 bit character set
+    movem.l (A7)+,D1-D7/A0-A6
     rts
 
 CONOUT: 
 ; Display single ASCII character in d1
+    movem.l D0-D7/A0-A6,-(A7)
     moveq.l #6,D0                        ; use EASy68k trap 15 task 6
     trap    #15
+    movem.l (A7)+,D0-D7/A0-A6
     rts                                  ; and exit
 
 LSTOUT:    
+    rts
+
 PUN:
+    move.w  D1,D0
+    rts
+
 RDR:
+    move.w  #$1a,D0                      ; return end of file as per CPM68k manual
+    rts
+
 GETIOB:
 SETIOB:
     moveq.l #0,D0
@@ -538,16 +560,13 @@ SELDSK:
     cmp.b   (RAMDRIVE),D1
     beq     .selram
 
-    cmp.b   #15,D1                  ; 16 max drives for cpm68k
-    bgt     .seldsk_error           ; .. return without changing anything
-
     moveq   #0,D0
     move.b  D1,D0                   ; save for later
 
     add.b   D1,D1                   ; Multiply D1 by 4 to change to address
     add.b   D1,D1
     lea     CPMDISK,A0
-    move.l  (0,A0,D1.L),D1            ; move sector for the requested disk to D1
+    move.l  (0,A0,D1.L),D1          ; move sector for the requested disk to D1
     
     beq     .seldsk_error           ; zero so no disk mapped to this slot
 
@@ -593,8 +612,6 @@ MISSING:
 READ:
 ; Read one cpm sector from requested disk, track, sector to dma address
 ; Can be a cpmimage on the sd card or the ram disk
-    ;cmp.b   #0,SELDRV
-    ;bne     .readRAMDrive
     move.b  (RAMDRIVE),D0
     cmp.b   SELDRV,D0
     beq     .readRAMDrive
@@ -717,12 +734,10 @@ setupReadDisk:
 WRITE:
 ; Write one cpm sector from requested disk, track, sector to dma address
 ; Can be a cpmimage on the sd card or the ram disk
-    ;cmp.b   #0,SELDRV
-    ;bne     .writeRAMDrive
+; We always write sectors immediately so no need to implement "write to directory sector"
     move.b  (RAMDRIVE),D0
     cmp.b   SELDRV,D0
     beq     .writeRAMDrive
-
 
     ; going to write to disk    
     bsr     setupReadDisk                               ; sets A0 to point to the right 128 bytes in memory, potentially reading from disk
@@ -748,7 +763,6 @@ WRITE:
     rts
     
 .noWriteError:
-    ;move.l #-1,lastFATSector
     moveq.l #0,D0                                       ; return success
     rts                    
 
@@ -766,6 +780,7 @@ WRITE:
     rts        
 
 FLUSH:
+    ; we always write each CPM sector immediatley, so no need to implement flush
     moveq.l #0,D0                                       ; return successful
     rts
 
@@ -1123,3 +1138,6 @@ msgMapDriveSource:
     dc.b     "Q.IMG to "
 msgMapDriveLetter:
     dc.b     "Q:",0
+
+msgFLUSH:
+    dc.b     "FLUSHING DISK",0
