@@ -5,22 +5,6 @@
 _ccp               equ $150BC                           ; hard location for _ccp of CPM15000.SR
 ramDriveLocation   equ $C0000                           ; memory location for RAM drive
 DEBUG              set 0                                ; set to 1 to print debug messgae, 0 turns off  
-DEBUG1             set 1                                ; set to 1 to print debug messgae, 0 turns off  
-
-
-; pass in a character to this routine and print it out
-; use to track progress through the code in debug ..
-debugPrintChar MACRO
-    IFNE DEBUG1
-        movem.l D0-D3/A0-A3,-(A7)
-
-        moveq.l #6,D0                                   
-        move.b  #\1,D1                                     
-        trap    #15
-    
-        movem.l (A7)+,D0-D3/A0-A3
-    ENDIF
-ENDM
 
 ; print sector information read from / written to a SD disk image (or real SD card)
 ; pass in a character to this routine to specify type of operation on the sector eg 'R' or 'W'
@@ -806,8 +790,8 @@ SETEXC:
     beq     NOSET                        
     cmpi    #47,D1
     beq     NOSET                       
-    cmpi    #9,D1                                       ; don't set trace trap
-    beq     NOSET
+    ;cmpi    #9,D1                                       ; don't set trace trap
+    ;beq     NOSET
     lsl     #2,D1                                       ; multiply exception number by 4
     movea.l D1,A0
     move.l  (A0),D0                                     ; return old vector value
@@ -833,7 +817,8 @@ RESV1         dc.b        0              ; reserve byte, padding
               align 2
 MEMRGN        dc.w        1              ; 1 memory region
               dc.l        $20000         ; after the CP/M 
-			  dc.l        $A0000         ; 524K bytes, more than enough for bootstrapping  
+              dc.l        $20000         ; try 128k ...
+;			  dc.l        $80000         ; length of 524K bytes, more than enough for bootstrapping  
 
 ; Drive mapping; 0xFFFFFFFF means mapped to Ram disk, 0 not present otherwise records
 ; the sector of the logical file on the FAT32 SD Card

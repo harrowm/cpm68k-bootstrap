@@ -43,8 +43,7 @@ all: $(DIR_TARGET)/cpmdisk.img \
 	$(DIR_TARGET)/cpmdiskk.img \
 	$(DIR_TARGET)/cpmdiskl.img \
 	$(DIR_TARGET)/cpmdiskm.img \
-	$(DIR_TARGET)/cpmdiskq.img \
-	$(DIR_TARGET)/cpmdiskp.img 
+	$(DIR_TARGET)/cpmdiskn.img 
 
 clean:
 	$(RM) -rf $(DIR_TARGET)/*
@@ -60,6 +59,7 @@ $(DIR_TARGET)/cpmdiska.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/copyDisks.sh $@ 1 $(CPM_1_3_SRC)
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice.txt
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice120.txt
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(CPM_1_3_SRC)/DISK3/ED.REL
 
 # Basic
 # which is here http://www.cpm.z80.de/download/cb68.zip
@@ -68,6 +68,7 @@ $(DIR_TARGET)/cpmdiskb.img: $(DIR_TARGET) $(BASIC_SRC)/cb68 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.DOC
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.L68
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 $(BASIC_SRC)/*.REL
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 asciiart.bas
 
 # Forth
 # which is here http://www.cpm.z80.de/download/forth68k.zip
@@ -134,21 +135,24 @@ $(DIR_TARGET)/cpmdiskm.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 $(DIR_TARGET)/cpmdiskn.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
 	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 sherlock.txt
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice120.txt
+	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 alice.txt
 	
 # Create small disk images for every other possible disk for testing
-$(DIR_TARGET)/cpmdisko.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
-	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
-	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+#$(DIR_TARGET)/cpmdisko.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+#	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+#	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	
 # Create small disk images for every other possible disk for testing
-$(DIR_TARGET)/cpmdiskp.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
-	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
-	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+#$(DIR_TARGET)/cpmdiskp.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+#	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+#	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	
 # Create small disk images for every other possible disk for testing
-$(DIR_TARGET)/cpmdiskq.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
-	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
-	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
+#$(DIR_TARGET)/cpmdiskq.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
+#	$(SHELL) $(CMDS)/formatPartitionedImage.sh $@ 1
+#	$(SHELL) $(CMDS)/copyFiles.sh $@ 4mb-hd-0 rosco.txt
 	
 #-------
 
@@ -194,11 +198,20 @@ $(DIR_TARGET)/cpmdiskq.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 # $(DIR_TARGET)/disk2.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1
 # 	$(SHELL) $(CMDS)/formatImage.sh $@ 4mb-hd-0
 # 	$(SHELL) $(CMDS)/copyAll.sh $@ 0 10 $(CPM_1_3_SRC)
-	
-$(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr
-	cat $(DIR_TARGET)/cpm15000.sr | sed -n '/\x1a/q;p' | grep -v "^S9" | srec_cat $(BIOS_FILE) - -header "$(BOOT_HEADER)" -execution-start-address=$(BOOT_START_ADDR) > $@
-	m68k-elf-objcopy -I srec -O binary $(BOOT_FILE) $(BOOT_FILE).bin
-	unix2dos $@
+
+
+# CPM68k file has to be rebuilt for the 68010, details are here:
+# https://www.retrobrewcomputers.org/doku.php?id=builderpages:rvumbaca:start
+$(BOOT_FILE): $(BIOS_FILE)
+	m68k-elf-objcopy -I srec -O binary cpm15000-010.s68 $(BOOT_FILE).bin
+#	unix2dos $@
+
+
+# For a 68000 machine use the lines below
+#$(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr
+#	cat $(DIR_TARGET)/cpm15000.sr | sed -n '/\x1a/q;p' | grep -v "^S9" | srec_cat $(BIOS_FILE) - -header "$(BOOT_HEADER)" -execution-start-address=$(BOOT_START_ADDR) > $@
+#	m68k-elf-objcopy -I srec -O binary $(BOOT_FILE) $(BOOT_FILE).bin
+#	unix2dos $@
 
 $(DIR_TARGET)/cpm15000.sr: $(CPM_1_3_SRC)/DISK8/CPM15000.SR
 	cp $(CPM_1_3_SRC)/DISK8/CPM15000.SR $(DIR_TARGET)/cpm15000.sr
