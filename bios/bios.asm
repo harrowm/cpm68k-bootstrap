@@ -192,7 +192,7 @@ _init::
     mulu.w  D5,D6
     add.w   reservedSectors,D6
     add.l   partStartSector,D6                          ; partStartSector is a long
-    move.w  D6,rootDirectorySector
+    move.l  D6,rootDirectorySector
 
 
 ;    sector = sector of start of root directory
@@ -244,8 +244,8 @@ _init::
     movem.l D0-D3/A0-A3,-(A7)
     lea     sd,A1
     moveq.l #2,D0                                       ; read sector trap
-    moveq.l #0,D1                                       ; required for r68k to work correctly
-    move.w  rootDirectorySector,D1
+    ;moveq.l #0,D1                                       ; required for r68k to work correctly - ha rootDirectoryServewr should be l not .w
+    move.l  rootDirectorySector,D1
     add.w   D3,D1                                       ; sector number to read plus offset to rootDirectoryCluster
     lea     sdBuf,A2
     trap    #13
@@ -332,7 +332,7 @@ _init::
     mulu.w  (sectorsPerCluster),D5  
 
     ; for efficiency we will point CPMImageSector at the actual block on the sd card
-    add.w   (rootDirectorySector),D5
+    add.l   (rootDirectorySector),D5
 
     move.b  D6,D2                                       ; Save for printing drive later
 
@@ -1084,7 +1084,7 @@ rootDirectoryCluster:                    ; cluster of root directory - usually 2
     dc.l     0
 
 rootDirectorySector:                     ; sector where root directory starts on sd card
-    dc.w     0
+    dc.l     0
 
 reservedSectors:                         ; sector where FAT table starts on sd card
     dc.w     0
