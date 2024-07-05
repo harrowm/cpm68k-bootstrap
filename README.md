@@ -1,6 +1,6 @@
 # cpm68k for the rosco_m68k single board computer
 
-The repository implements cpm68k on a rosco_m68k single board computer.  Features include upto 16 virtual drives on the SD Card named CPMDRIVE<letter>.IMG where letter is in the range A to P.  If less than 16 drives are used, a small Ram disk is also mounted.
+The repository implements cpm68k on a rosco_m68k single board computer.  Features include upto 16 virtual drives on the SD Card named CPMDRIVE<letter>.IMG where letter is in the range A to P.  If less than 16 drives are used, a small RAM disk is also mounted.
 
 The Makefile curates a set of standard disk images that can be used. These include:
 - a C compiler
@@ -10,7 +10,7 @@ The Makefile curates a set of standard disk images that can be used. These inclu
 - an old version of the EMACS editor
 - the cpm68k distribution 
 
-The code has been tested on a 68010 and 68020 board as well as under th "r68k" Rosco emulator.  Under Mame there is an issue with writing to the SD Card.  Mame crashes out under load.
+The code has been tested on a 68010 and 68020 board as well as under the "r68k" Rosco emulator (look in rosco_m68k/code/tools).  
 
 The main sources for the project are listed below.  The code is really a mash-up between Plasmode's work on the mpu302 and Damien Wildie's work on the S100 single board computer.
 

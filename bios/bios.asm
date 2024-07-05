@@ -817,8 +817,7 @@ RESV1         dc.b        0              ; reserve byte, padding
               align 2
 MEMRGN        dc.w        1              ; 1 memory region
               dc.l        $20000         ; after the CP/M 
-              dc.l        $20000         ; try 128k ...
-;			  dc.l        $80000         ; length of 524K bytes, more than enough for bootstrapping  
+              dc.l        $80000         ; this length .. so 512k .. leaving the RAM disk to load from 0xC0000
 
 ; Drive mapping; 0xFFFFFFFF means mapped to Ram disk, 0 not present otherwise records
 ; the sector of the logical file on the FAT32 SD Card
