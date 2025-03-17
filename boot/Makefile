@@ -33,7 +33,7 @@ endif
 #	| sed 's/libraries: =/-L/g' 	\
 #	| sed 's/:/m68000\/ -L/g')m68000/
 
-LD       = m68k-elf-ld
+LD       = m68k-elf-rosco-ld
 LDFLAGS   = -L $(SYSLIBDIR) --gc-sections --oformat=elf32-m68k
 #LDFLAGS  += $(GCC_LIBS)
 
@@ -46,10 +46,10 @@ LIBS	 += -lsdfat
 LIBS	 += -lstart_serial
 #LIBS     += -lgcc
 
-OBJDUMP = m68k-elf-objdump
-OBJCOPY = m68k-elf-objcopy
-SIZE = m68k-elf-size
-NM = m68k-elf-nm
+OBJDUMP = m68k-elf-rosco-objdump
+OBJCOPY = m68k-elf-rosco-objcopy
+SIZE = m68k-elf-rosco-size
+NM = m68k-elf-rosco-nm
 
 all: target/boot.bin
 

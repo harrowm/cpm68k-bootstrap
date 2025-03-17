@@ -204,7 +204,7 @@ $(DIR_TARGET)/cpmdiskn.img: $(DIR_TARGET) $(CPM_1_3_SRC)/DISK1 $(BOOT_FILE)
 # CPM68k file has to be rebuilt for the 68010, details are here:
 # https://www.retrobrewcomputers.org/doku.php?id=builderpages:rvumbaca:start
 $(BOOT_FILE): $(BIOS_FILE)
-	m68k-elf-objcopy -I srec -O binary cpm15000-010.s68 $(BOOT_FILE).bin
+	m68k-elf-rosco-objcopy -I srec -O binary cpm15000-010.s68 $(BOOT_FILE).bin
 
 # For a 68000 machine use the lines below
 #$(BOOT_FILE): $(BIOS_FILE) $(DIR_TARGET)/cpm15000.sr

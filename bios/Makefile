@@ -13,7 +13,7 @@ VASMFLAGS=-Felf -m68010 -quiet -Lnf $(DEFINES)
 SYSINCDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/include
 SYSLIBDIR?=$(ROSCO_M68K_DIR)/code/software/libs/build/lib
 
-LD       = m68k-elf-ld
+LD       = m68k-elf-rosco-ld
 LDFLAGS   = -L $(SYSLIBDIR) --gc-sections
 
 LIBS	  = -lrosco_m68k
@@ -34,7 +34,7 @@ target/bios.srec: obj/bios.srec | target
 	srec_info $@
 
 target/bios.sr.bin: target/bios.srec | target
-	m68k-elf-objcopy -I srec -O binary target/bios.srec target/bios.sr.bin
+	m68k-elf-rosco-objcopy -I srec -O binary target/bios.srec target/bios.sr.bin
 
 clean:
 	rm -rf obj/* target/*
